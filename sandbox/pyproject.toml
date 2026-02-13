@@ -23,3 +23,12 @@ dependencies = [
 
 [project.scripts]
 ai-sbx = "ralph_sandbox.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ralph_sandbox"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"ralph_sandbox/dockerfiles" = "ralph_sandbox/dockerfiles"
+"ralph_sandbox/resources" = "ralph_sandbox/resources"
+"ralph_sandbox/templates" = "ralph_sandbox/templates"
+"ralph_sandbox/docker-compose.base.yaml" = "ralph_sandbox/docker-compose.base.yaml"

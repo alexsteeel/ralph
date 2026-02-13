@@ -20,3 +20,14 @@
   - Templates (`tasks/templates/`), skill (`tasks/skills/task-manager.md`)
   - Tests (`tasks/tests/test_core.py`, 32 tests passing)
   - Runtime compatibility preserved: `~/.md-task-mcp` data path, logger name
+- `ai-agents-sandbox` → `sandbox/` as `ralph-sandbox` package (#3)
+  - CLI (`ralph_sandbox/cli.py`, entry point: `ai-sbx`)
+  - Configuration (`ralph_sandbox/config.py`, Pydantic v2 models)
+  - Commands: init, image, worktree, docker, doctor, notify, upgrade
+  - Templates manager (`ralph_sandbox/templates.py`)
+  - Utilities (`ralph_sandbox/utils.py`)
+  - Dockerfiles (10 variants), resources, templates
+  - Tests (78 total: 68 existing + 10 migration-specific)
+  - All `ai_sbx` imports renamed to `ralph_sandbox`
+  - Runtime strings preserved (`ai-sbx` CLI, `.ai-sbx` config dir)
+  - Ruff linter fixes applied (76 auto-fixed style issues)

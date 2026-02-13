@@ -1,0 +1,39 @@
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# Set umask to allow group write permissions
+umask 0002
+
+# Path to your oh-my-zsh installation.
+export ZSH="$HOME/.oh-my-zsh"
+
+ZSH_THEME="powerlevel10k/powerlevel10k"
+POWERLEVEL9K_DISABLE_GITSTATUS=true
+
+plugins=(
+  aliases
+  colorize
+  docker
+  docker-compose
+  git
+  history
+  zsh-autosuggestions
+  zsh-syntax-highlighting
+)
+
+source $ZSH/oh-my-zsh.sh
+
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+# NODE_OPTIONS: Prevent OOM in Claude Code by increasing V8 heap limit
+# https://github.com/anthropics/claude-code/issues/3931
+export NODE_OPTIONS="--max-old-space-size=16384"
+
+# Aliases for Claude and Codex
+# Disable auto-update to preserve pinned version (proxy regression in 2.0.48+)
+alias claude='CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 claude --dangerously-skip-permissions'
+alias codex='codex'
+
+# Ralph CLI shell completion (Typer-based)
+eval "$(ralph --show-completion zsh 2>/dev/null || true)"

@@ -1,0 +1,38 @@
+{
+  "DISABLE_TELEMETRY": true,
+  "defaultOpenMode": "container",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/claude/.claude/hooks/git_guard.py"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/claude/.claude/hooks/notify.sh complete 'Agent task completed'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/claude/.claude/hooks/notify.sh clarification 'Claude needs your attention'"
+          }
+        ]
+      }
+    ]
+  }
+}
