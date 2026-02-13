@@ -116,8 +116,8 @@
     ]
   },
   "mcpServers": {
-    "md-task-mcp": {
-      "command": "md-task-mcp",
+    "ralph-tasks": {
+      "command": "ralph-tasks",
       "args": [
         "serve"
       ]

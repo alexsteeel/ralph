@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- Final monorepo integration: Dockerfile, entrypoint, documentation (#7)
+  - Dockerfile pip install URLs updated to monorepo (`ralph.git#subdirectory=...`)
+  - entrypoint.sh MCP registration: `md-task-mcp` → `ralph-tasks`
+  - `codex_config.toml` and `settings.example.json`: MCP server name updated
+  - Root `conftest.py` for pytest discovery across all packages
+  - `README.md` with setup, development, and architecture docs
+  - `CLAUDE.md` transformed from migration plan to project instructions
+  - Integration tests (32 tests) covering Dockerfile, entrypoint, hooks, CLI, MCP, docs
 - Monorepo initialization with uv workspace (#1)
 - Root `pyproject.toml` with workspace members: tasks, sandbox, ralph-cli
 - Package skeletons: `ralph-tasks`, `ralph-sandbox`, `ralph-cli` (v0.0.1)

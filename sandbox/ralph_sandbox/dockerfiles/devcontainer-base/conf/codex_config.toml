@@ -15,8 +15,9 @@ model = "gpt-5.2-codex"
 model_provider = "openai"
 model_reasoning_effort = "medium"
 
-[mcp_servers.md-task-mcp]
-command = "md-task-mcp"
+[mcp_servers.ralph-tasks]
+command = "ralph-tasks"
+args = ["serve"]
 
 [mcp_servers.playwright]
 command = "playwright-mcp"

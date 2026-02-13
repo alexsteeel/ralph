@@ -36,7 +36,7 @@ if ! check_dir_ownership /home/claude/.claude ".claude"; then
     echo ""
 fi
 
-# Check .md-task-mcp directory - needed for task management MCP server
+# Check .md-task-mcp directory - needed for ralph-tasks MCP server data
 check_dir_ownership /home/claude/.md-task-mcp ".md-task-mcp"
 
 # Copy host .gitconfig if mounted (for user identity: name, email)
@@ -177,12 +177,12 @@ fi
 if command -v claude &> /dev/null; then
     MCP_LIST=$(claude mcp list 2>/dev/null || echo "")
 
-    # Add md-task-mcp server if not already configured
-    if echo "$MCP_LIST" | grep -q "md-task-mcp"; then
+    # Add ralph-tasks MCP server if not already configured
+    if echo "$MCP_LIST" | grep -q "ralph-tasks"; then
         true  # already configured
     else
-        claude mcp add -s user md-task-mcp -- md-task-mcp serve 2>/dev/null && \
-            echo "Added md-task-mcp MCP server" || true
+        claude mcp add -s user ralph-tasks -- ralph-tasks serve 2>/dev/null && \
+            echo "Added ralph-tasks MCP server" || true
     fi
 
     # Add context7 MCP server if not already configured

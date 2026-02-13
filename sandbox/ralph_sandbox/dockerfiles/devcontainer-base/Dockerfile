@@ -110,15 +110,15 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install Python linting and formatting tools globally using uv
 RUN uv pip install --system --break-system-packages --no-cache ruff black
 
-# Install md-task-mcp (markdown-based task management MCP server)
-# https://github.com/alexsteeel/md-task-mcp
+# Install ralph-tasks (markdown-based task management MCP server)
+# https://github.com/alexsteeel/ralph/tree/main/tasks
 RUN uv pip install --system --break-system-packages --no-cache \
-    git+https://github.com/alexsteeel/md-task-mcp.git
+    "ralph-tasks @ git+https://github.com/alexsteeel/ralph.git#subdirectory=tasks"
 
 # Install Ralph CLI (autonomous task execution with API recovery)
-# https://github.com/alexsteeel/.claude/tree/master/cli
+# https://github.com/alexsteeel/ralph/tree/main/ralph-cli
 RUN uv pip install --system --break-system-packages --no-cache \
-    "ralph @ git+https://github.com/alexsteeel/.claude.git#subdirectory=cli"
+    "ralph-cli @ git+https://github.com/alexsteeel/ralph.git#subdirectory=ralph-cli"
 
 # Install shfmt
 ENV SHFMT_VERSION=3.7.0
