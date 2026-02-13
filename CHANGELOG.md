@@ -12,6 +12,13 @@
 - Per-package smoke tests
 
 ### Migrated
+- `.claude/{commands,hooks,skills}` → `claude/` config directory (#4)
+  - 14 command definitions (`claude/commands/*.md`)
+  - 5 workflow hooks (`claude/hooks/`: check_workflow, check_workflow_ralph, enforce_isolated_skills, hook_utils, notify)
+  - 1 skill (`claude/skills/task-manager.md`)
+  - 1 settings template (`claude/settings.example.json`)
+  - Fixed hardcoded paths: `check_workflow.py` (`Path.home()`), `notify.sh` (`$HOME`)
+  - Ruff linter fixes: unused f-string prefix, duplicate import, import order
 - `md-task-mcp` → `tasks/` as `ralph-tasks` package (#2)
   - Core data layer (`ralph_tasks/core.py`)
   - MCP server (`ralph_tasks/mcp.py`, renamed from `main.py`)
