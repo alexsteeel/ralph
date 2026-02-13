@@ -10,12 +10,15 @@ requires-python = ">=3.10"
 dependencies = [
     "typer>=0.9",
     "pydantic-settings>=2.0",
-    "gitpython>=3.1",
-    "ralph-tasks",
+    "gitpython>=3.1.41",
+    "rich>=13.0",
 ]
-
-[tool.uv.sources]
-ralph-tasks = { workspace = true }
 
 [project.scripts]
 ralph = "ralph_cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ralph_cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

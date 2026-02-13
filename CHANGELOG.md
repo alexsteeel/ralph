@@ -38,3 +38,12 @@
   - All `ai_sbx` imports renamed to `ralph_sandbox`
   - Runtime strings preserved (`ai-sbx` CLI, `.ai-sbx` config dir)
   - Ruff linter fixes applied (76 auto-fixed style issues)
+- `.claude/cli/` → `ralph-cli/` as `ralph-cli` package (#5)
+  - Package renamed: `ralph` → `ralph_cli` (17 modules, 7 test files)
+  - CLI entry point: `ralph = "ralph_cli.cli:main"`
+  - Commands: implement, plan, interview, review, health, logs, notify
+  - Error classification, executor, git ops, recovery loop, stream monitor
+  - Tests: 82 passing (imports updated, test_package adapted)
+  - Dependencies: typer, pydantic-settings, gitpython>=3.1.41 (CVE fix), rich
+  - Ruff linter fixes applied (101 auto-fixed), B008 excluded for Typer pattern
+  - All internal imports are relative (no changes needed for rename)

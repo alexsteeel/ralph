@@ -23,9 +23,8 @@ def test_pyproject_toml_exists():
     assert 'version = "0.0.1"' in content
 
 
-def test_workspace_dependency():
-    """ralph-cli depends on ralph-tasks via workspace."""
+def test_cli_entry_point():
+    """ralph CLI entry point is configured."""
     pyproject = Path(__file__).parent.parent / "pyproject.toml"
     content = pyproject.read_text()
-    assert '"ralph-tasks"' in content
-    assert "ralph-tasks = { workspace = true }" in content
+    assert 'ralph = "ralph_cli.cli:main"' in content
