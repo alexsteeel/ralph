@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ralph-sandbox"
+version = "0.0.1"
+description = "Secure, isolated development environments for AI-assisted coding"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1",
+    "rich>=13.0",
+    "pyyaml>=6.0",
+    "docker>=6.0",
+    "gitpython>=3.1",
+    "inquirer>=3.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "jinja2>=3.1",
+    "toml>=0.10",
+    "platformdirs>=3.0",
+]
+
+[project.scripts]
+ai-sbx = "ralph_sandbox.cli:cli"

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ralph-cli"
+version = "0.0.1"
+description = "Autonomous task execution CLI for Claude Code"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.9",
+    "pydantic-settings>=2.0",
+    "gitpython>=3.1",
+    "ralph-tasks",
+]
+
+[tool.uv.sources]
+ralph-tasks = { workspace = true }
+
+[project.scripts]
+ralph = "ralph_cli.cli:main"
