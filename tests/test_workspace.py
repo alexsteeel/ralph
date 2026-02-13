@@ -47,8 +47,20 @@ def test_claude_dirs_exist():
         assert d.is_dir(), f"claude/{subdir}/ missing"
 
 
-def test_codex_dir_exists():
-    assert (ROOT / "codex").is_dir()
+def test_codex_agents_md():
+    agents_md = ROOT / "codex" / "AGENTS.md"
+    assert agents_md.is_file(), "codex/AGENTS.md missing"
+
+    content = agents_md.read_text()
+    required_sections = [
+        "## Project Structure",
+        "## Build & Test",
+        "## Code Conventions",
+        "## MCP Servers",
+        "## Review Guidelines",
+    ]
+    for section in required_sections:
+        assert section in content, f"Missing required section: {section}"
 
 
 def test_all_packages_importable_with_unified_version():

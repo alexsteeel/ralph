@@ -7,7 +7,8 @@
 - Root `pyproject.toml` with workspace members: tasks, sandbox, ralph-cli
 - Package skeletons: `ralph-tasks`, `ralph-sandbox`, `ralph-cli` (v0.0.1)
 - Consolidated `.gitignore` from all source repos
-- Empty config directories: `claude/{commands,hooks,skills}`, `codex/`
+- Codex CLI configuration: `codex/AGENTS.md` with project instructions for code review (#6)
+- Empty config directories: `claude/{commands,hooks,skills}`
 - Workspace tests verifying structure, imports, and version consistency
 - Per-package smoke tests
 
