@@ -19,3 +19,9 @@ dependencies = [
 ralph-tasks = "ralph_tasks.mcp:main"
 tm = "ralph_tasks.cli:main"
 tm-web = "ralph_tasks.web:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ralph_tasks"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"templates" = "share/ralph-tasks/templates"

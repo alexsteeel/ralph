@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Projects - Task Cloud{% endblock %}
+
+{% block content %}
+<header>
+    <h1>Projects</h1>
+    <button class="btn-create" onclick="openCreateModal('project')" title="Create Project">+</button>
+    <button class="btn-icon" onclick="openSettingsModal()" title="Settings" style="margin-left: auto;">&#9881;</button>
+</header>
+
+{% if project_count > 0 %}
+<div class="summary-bar">
+    <span class="summary-total"><strong>{{ project_count }}</strong> project{{ 's' if project_count != 1 else '' }} · <strong>{{ summary.total }}</strong> task{{ 's' if summary.total != 1 else '' }}</span>
+    <div class="summary-stats">
+        {% if summary.hold > 0 %}<span class="summary-stat status-hold">{{ summary.hold }} hold</span>{% endif %}
+        {% if summary.work > 0 %}<span class="summary-stat status-work">{{ summary.work }} work</span>{% endif %}
+        {% if summary.todo > 0 %}<span class="summary-stat status-todo">{{ summary.todo }} todo</span>{% endif %}
+        {% if summary.done > 0 %}<span class="summary-stat status-done">{{ summary.done }} done</span>{% endif %}
+        {% if summary.approved > 0 %}<span class="summary-stat status-approved">{{ summary.approved }} approved</span>{% endif %}
+    </div>
+</div>
+
+{% if monthly %}
+<div class="monthly-summary">
+    {% for month, stats in monthly %}
+    <div class="month-stat" onclick="openMonthlyModal('{{ month }}')" data-month="{{ month }}">
+        <span class="month-label">{{ month[5:7] }}.{{ month[:4] }}</span>
+        <span class="month-cat status-todo" title="Todo">{{ stats.todo }} todo</span>
+        <span class="month-cat status-work" title="Work">{{ stats.work }} work</span>
+        <span class="month-cat status-done" title="Done">{{ stats.done }} done</span>
+        <span class="month-cat status-approved" title="Approved">{{ stats.approved }} approved</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+<div class="cloud">
+    {% for p in projects %}
+    <a href="/kanban/{{ p.name }}" class="card">
+        <div class="card-title">{{ p.name }}</div>
+        {% if p.description %}
+        <div class="card-description">{{ p.description }}</div>
+        {% endif %}
+        <div class="card-meta">{{ p.total }} task{{ 's' if p.total != 1 else '' }}</div>
+        <div class="stats">
+            {% if p.hold > 0 %}
+            <span class="stat status-hold">{{ p.hold }} hold</span>
+            {% endif %}
+            {% if p.work > 0 %}
+            <span class="stat status-work">{{ p.work }} work</span>
+            {% endif %}
+            {% if p.todo > 0 %}
+            <span class="stat status-todo">{{ p.todo }} todo</span>
+            {% endif %}
+            {% if p.done > 0 %}
+            <span class="stat status-done">{{ p.done }} done</span>
+            {% endif %}
+            {% if p.approved > 0 %}
+            <span class="stat status-approved">{{ p.approved }} approved</span>
+            {% endif %}
+        </div>
+    </a>
+    {% else %}
+    <p class="card-meta">No projects yet.</p>
+    {% endfor %}
+</div>
+
+<!-- Monthly Tasks Modal -->
+<div class="monthly-modal-overlay" id="monthly-modal">
+    <div class="monthly-modal">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h2 id="monthly-modal-title"></h2>
+            <button class="modal-close" onclick="closeMonthlyModal()">&times;</button>
+        </div>
+        <div class="monthly-task-list" id="monthly-task-list">
+        </div>
+    </div>
+</div>
+
+<script>
+const monthNames = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+function createTaskItem(t) {
+    const row = document.createElement('div');
+    row.className = 'monthly-task-item';
+
+    const status = document.createElement('span');
+    status.className = `monthly-task-status status-${t.status}`;
+    status.textContent = t.status;
+
+    const project = document.createElement('span');
+    project.className = 'monthly-task-project';
+    project.textContent = t.project;
+
+    const title = document.createElement('span');
+    title.className = 'monthly-task-title';
+    title.textContent = `#${t.number} ${t.description}`;
+
+    const date = document.createElement('span');
+    date.className = 'monthly-task-date';
+    date.textContent = t.date ? t.date.slice(0, 10) : '';
+
+    row.appendChild(status);
+    row.appendChild(project);
+    row.appendChild(title);
+    row.appendChild(date);
+    return row;
+}
+
+async function openMonthlyModal(month) {
+    const modal = document.getElementById('monthly-modal');
+    const title = document.getElementById('monthly-modal-title');
+    const list = document.getElementById('monthly-task-list');
+
+    // Format month title (YYYY-MM -> Месяц YYYY)
+    const [year, monthNum] = month.split('-');
+    title.textContent = `${monthNames[parseInt(monthNum)]} ${year}`;
+
+    list.textContent = '';
+    const loading = document.createElement('p');
+    loading.style.color = 'var(--text-muted)';
+    loading.textContent = 'Загрузка...';
+    list.appendChild(loading);
+    modal.classList.add('active');
+
+    try {
+        const res = await fetch(`/api/monthly/${month}`);
+        const data = await res.json();
+        list.textContent = '';
+
+        if (data.tasks.length === 0) {
+            const empty = document.createElement('p');
+            empty.style.color = 'var(--text-muted)';
+            empty.textContent = 'Нет задач за этот месяц';
+            list.appendChild(empty);
+            return;
+        }
+
+        data.tasks.forEach(t => list.appendChild(createTaskItem(t)));
+    } catch (e) {
+        list.textContent = '';
+        const error = document.createElement('p');
+        error.style.color = 'var(--hold)';
+        error.textContent = 'Ошибка загрузки';
+        list.appendChild(error);
+        console.error(e);
+    }
+}
+
+function closeMonthlyModal() {
+    document.getElementById('monthly-modal').classList.remove('active');
+}
+
+document.getElementById('monthly-modal').addEventListener('click', e => {
+    if (e.target.id === 'monthly-modal') closeMonthlyModal();
+});
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('monthly-modal').classList.contains('active')) {
+        closeMonthlyModal();
+    }
+    if (e.key === 'Escape' && document.getElementById('settings-modal').classList.contains('active')) {
+        closeSettingsModal();
+    }
+});
+
+// Settings modal
+async function openSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    const pathInput = document.getElementById('settings-backup-path');
+    const lastBackup = document.getElementById('settings-last-backup');
+
+    try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        pathInput.value = data.backup_path || '';
+        lastBackup.textContent = data.last_backup ? `Последний бэкап: ${data.last_backup}` : 'Бэкапы не создавались';
+    } catch (e) {
+        console.error(e);
+    }
+
+    modal.classList.add('active');
+}
+
+function closeSettingsModal() {
+    document.getElementById('settings-modal').classList.remove('active');
+}
+
+async function saveSettings() {
+    const pathInput = document.getElementById('settings-backup-path');
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ backup_path: pathInput.value || null })
+        });
+        if (res.ok) {
+            closeSettingsModal();
+        } else {
+            const err = await res.json();
+            alert(err.detail || 'Ошибка сохранения');
+        }
+    } catch (e) {
+        alert('Ошибка сохранения');
+        console.error(e);
+    }
+}
+
+async function triggerBackup() {
+    try {
+        const res = await fetch('/api/backup', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message);
+        openSettingsModal(); // Refresh last backup time
+    } catch (e) {
+        alert('Ошибка бэкапа');
+        console.error(e);
+    }
+}
+
+document.getElementById('settings-modal').addEventListener('click', e => {
+    if (e.target.id === 'settings-modal') closeSettingsModal();
+});
+</script>
+
+<!-- Settings Modal -->
+<div class="monthly-modal-overlay" id="settings-modal">
+    <div class="monthly-modal" style="max-width: 450px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h2>Настройки</h2>
+            <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+        </div>
+        <div class="form-group">
+            <label for="settings-backup-path">Путь для бэкапов (каждый час)</label>
+            <input type="text" id="settings-backup-path" placeholder="~/backups/tasks или /path/to/backup" style="width: 100%;">
+        </div>
+        <p id="settings-last-backup" style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0;"></p>
+        <div class="form-actions" style="margin-top: 1rem;">
+            <button class="btn btn-edit" onclick="triggerBackup()">Бэкап сейчас</button>
+            <button class="btn btn-cancel" onclick="closeSettingsModal()">Отмена</button>
+            <button class="btn btn-save" onclick="saveSettings()">Сохранить</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
