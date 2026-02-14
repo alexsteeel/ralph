@@ -1,0 +1,23 @@
+# Common Project Docker Compose Overrides
+# This file is committed to git and shared across the team
+# Add project-specific configuration here
+
+services:
+  tinyproxy-devcontainer:
+    image: ai-agents-sandbox/tinyproxy:1.0.0
+    environment:
+      # Add your project-specific domains here (comma or space separated)
+      USER_WHITELIST_DOMAINS: "api.telegram.org"
+      UPSTREAM_PROXY: "socks5://host.gateway:9999"
+
+  devcontainer:
+    # Building from Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount user's Claude settings (readonly) - will be copied on startup
+      - ${HOME}/.claude:/host/.claude:ro
+    environment:
+      # Flag to copy Claude settings on startup
+      - COPY_CLAUDE_SETTINGS=true

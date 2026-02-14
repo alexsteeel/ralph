@@ -1,0 +1,40 @@
+# AI Agents Sandbox - Project Configuration Template
+# This file contains shareable project defaults
+# When cloning this repository, run 'ai-sbx init project' to generate your local ai-sbx.yaml
+
+# Project name (used for Docker Compose project name)
+name: ralph
+
+# NOTE: 'path' will be set automatically to your local project path
+
+# Development environment preferences
+preferred_ide: devcontainer
+base_image: base
+
+# Main branch (for worktree filtering)
+main_branch: main
+# Proxy configuration (always enabled for security)
+proxy:
+  enabled: true
+  # Upstream proxy (adjust for your environment)
+  upstream: socks5://host.gateway:8888
+  # Domains that bypass the upstream proxy
+  # no_proxy:
+  #   - github.com
+  #   - gitlab.com
+  # Additional domains to allow through the proxy
+  # whitelist_domains:
+  #   - api.myproject.com
+  
+
+# Docker configuration
+docker:
+  image_tag: 1.0.0
+  # Custom Docker registries
+  # custom_registries:
+  #   - my.registry.com
+  
+
+# Environment variables
+environment:
+MOUNT_CLAUDE_SETTINGS: true

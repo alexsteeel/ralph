@@ -1,0 +1,49 @@
+{
+    "name": "ralph - AI Agents Sandbox",
+    "dockerComposeFile": ["docker-compose.base.yaml", "docker-compose.override.yaml"],
+    "service": "devcontainer",
+    "workspaceFolder": "/workspace",
+    "shutdownAction": "stopCompose",
+    "containerUser": "claude",
+    "updateRemoteUserUID": false,
+    "initializeCommand": ".devcontainer/init.sh \"${localWorkspaceFolder}\"",
+    "postCreateCommand": "/home/claude/scripts/non-root-post-create.sh",
+    "containerEnv": {
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor"
+    },
+    "remoteEnv": {
+        "NODE_OPTIONS": "--max-old-space-size=4096",
+        "CLAUDE_CONFIG_DIR": "/home/claude/.claude",
+        "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
+    },
+
+    "features": {},
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-azuretools.vscode-docker",
+                "github.copilot",
+                "eamodio.gitlens",
+                "ms-vscode.makefile-tools"
+            ],
+            "settings": {
+                "terminal.integrated.defaultProfile.linux": "zsh",
+                "python.defaultInterpreterPath": "/usr/local/bin/python",
+                "python.linting.enabled": true,
+                "python.linting.pylintEnabled": false,
+                "python.linting.flake8Enabled": false,
+                "python.formatting.provider": "black",
+                "editor.formatOnSave": true,
+                "files.trimTrailingWhitespace": true
+            }
+        }
+    },
+
+    "forwardPorts": [],
+
+    "mounts": []
+}
