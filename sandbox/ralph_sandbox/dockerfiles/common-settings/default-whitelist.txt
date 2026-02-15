@@ -63,6 +63,9 @@ googleapis.com
 gstatic.com
 us-docker.pkg.dev
 
+# Telegram (ralph notify)
+api.telegram.org
+
 # CodeRabbit AI services
 coderabbit.ai
 api.coderabbit.ai

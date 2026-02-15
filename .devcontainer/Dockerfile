@@ -1,7 +1,7 @@
 # Project-specific Dockerfile
 # Extends the AI Agents Sandbox devcontainer image
 
-FROM ai-agents-sandbox/devcontainer:1.0.0
+FROM ai-agents-sandbox/devcontainer:1.1.2
 
 # Switch to root for any additional installations
 USER root
