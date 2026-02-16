@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from neo4j import Session
+
+logger = logging.getLogger(__name__)
+
+_ALLOWED_PARENT_LABELS = frozenset({"Workspace", "Project"})
 
 
 def _now() -> str:
@@ -17,6 +22,7 @@ def _now() -> str:
 # Workspace
 # ---------------------------------------------------------------------------
 
+
 def create_workspace(session: Session, name: str, description: str = "") -> dict:
     """Create a Workspace node. Returns created node properties."""
     result = session.run(
@@ -24,7 +30,9 @@ def create_workspace(session: Session, name: str, description: str = "") -> dict
         CREATE (w:Workspace {name: $name, description: $description, created_at: $now})
         RETURN w {.*} AS workspace
         """,
-        name=name, description=description, now=_now(),
+        name=name,
+        description=description,
+        now=_now(),
     )
     record = result.single()
     if record is None:
@@ -50,6 +58,7 @@ def list_workspaces(session: Session) -> list[dict]:
 # Project
 # ---------------------------------------------------------------------------
 
+
 def create_project(
     session: Session,
     parent_name: str,
@@ -62,13 +71,20 @@ def create_project(
     parent_label: "Workspace" or "Project" — determines what node type to attach to.
     Composite uniqueness (name within parent) is enforced at the application level.
     """
+    if parent_label not in _ALLOWED_PARENT_LABELS:
+        raise ValueError(
+            f"Invalid parent_label '{parent_label}'. "
+            f"Must be one of: {', '.join(sorted(_ALLOWED_PARENT_LABELS))}"
+        )
+
     # Check for duplicate
     check = session.run(
         f"""
         MATCH (parent:{parent_label} {{name: $parent_name}})-[:CONTAINS_PROJECT]->(p:Project {{name: $name}})
         RETURN p
         """,
-        parent_name=parent_name, name=name,
+        parent_name=parent_name,
+        name=name,
     )
     if check.single():
         raise ValueError(f"Project '{name}' already exists under {parent_label} '{parent_name}'")
@@ -81,13 +97,14 @@ def create_project(
         }})
         RETURN p {{.*}} AS project
         """,
-        parent_name=parent_name, name=name, description=description, now=_now(),
+        parent_name=parent_name,
+        name=name,
+        description=description,
+        now=_now(),
     )
     record = result.single()
     if record is None:
-        raise ValueError(
-            f"{parent_label} '{parent_name}' not found"
-        )
+        raise ValueError(f"{parent_label} '{parent_name}' not found")
     return dict(record["project"])
 
 
@@ -98,7 +115,8 @@ def get_project(session: Session, workspace_name: str, project_name: str) -> dic
         MATCH (w:Workspace {name: $ws})-[:CONTAINS_PROJECT]->(p:Project {name: $name})
         RETURN p {.*} AS project
         """,
-        ws=workspace_name, name=project_name,
+        ws=workspace_name,
+        name=project_name,
     )
     record = result.single()
     return dict(record["project"]) if record else None
@@ -119,6 +137,7 @@ def list_projects(session: Session, parent_name: str) -> list[dict]:
     result = session.run(
         """
         MATCH (parent {name: $parent_name})-[:CONTAINS_PROJECT]->(p:Project)
+        WHERE parent:Workspace OR parent:Project
         RETURN p {.*} AS project
         ORDER BY p.name
         """,
@@ -131,44 +150,36 @@ def list_projects(session: Session, parent_name: str) -> list[dict]:
 # Task
 # ---------------------------------------------------------------------------
 
+
 def create_task(
     session: Session,
     project_name: str,
     description: str,
     **fields: Any,
 ) -> dict:
-    """Create a Task under a Project. Auto-assigns next number."""
-    # Get next task number
-    num_result = session.run(
-        """
-        MATCH (p:Project {name: $project})-[:HAS_TASK]->(t:Task)
-        RETURN COALESCE(MAX(t.number), 0) + 1 AS next_number
-        """,
-        project=project_name,
-    )
-    num_record = num_result.single()
-    next_number = num_record["next_number"] if num_record else 1
-
+    """Create a Task under a Project. Auto-assigns next number atomically."""
     now = _now()
-    props = {
-        "number": next_number,
+    props: dict[str, Any] = {
         "description": description,
         "status": fields.get("status", "todo"),
         "created_at": now,
         "updated_at": now,
     }
-    if "started" in fields and fields["started"]:
-        props["started"] = fields["started"]
-    if "completed" in fields and fields["completed"]:
-        props["completed"] = fields["completed"]
+    for field in ("started", "completed"):
+        if fields.get(field):
+            props[field] = fields[field]
 
     result = session.run(
         """
         MATCH (p:Project {name: $project})
+        OPTIONAL MATCH (p)-[:HAS_TASK]->(existing:Task)
+        WITH p, COALESCE(MAX(existing.number), 0) + 1 AS next_number
         CREATE (p)-[:HAS_TASK]->(t:Task $props)
+        SET t.number = next_number
         RETURN t {.*} AS task
         """,
-        project=project_name, props=props,
+        project=project_name,
+        props=props,
     )
     record = result.single()
     if record is None:
@@ -182,7 +193,8 @@ def get_task(session: Session, project_name: str, number: int) -> dict | None:
         MATCH (p:Project {name: $project})-[:HAS_TASK]->(t:Task {number: $number})
         RETURN t {.*} AS task
         """,
-        project=project_name, number=number,
+        project=project_name,
+        number=number,
     )
     record = result.single()
     return dict(record["task"]) if record else None
@@ -214,7 +226,9 @@ def update_task(
         SET t += $fields
         RETURN t {.*} AS task
         """,
-        project=project_name, number=number, fields=fields,
+        project=project_name,
+        number=number,
+        fields=fields,
     )
     record = result.single()
     if record is None:
@@ -237,7 +251,8 @@ def delete_task(session: Session, project_name: str, number: int) -> bool:
         DETACH DELETE t, s, f, c, reply, wr, ws, sub
         RETURN count(*) AS deleted
         """,
-        project=project_name, number=number,
+        project=project_name,
+        number=number,
     )
     record = result.single()
     return record is not None and record["deleted"] > 0
@@ -247,6 +262,7 @@ def delete_task(session: Session, project_name: str, number: int) -> bool:
 # Subtask
 # ---------------------------------------------------------------------------
 
+
 def create_subtask(
     session: Session,
     project_name: str,
@@ -254,21 +270,9 @@ def create_subtask(
     description: str,
     **fields: Any,
 ) -> dict:
-    """Create a subtask linked to a parent task via HAS_SUBTASK."""
-    # Get next subtask number within the project
-    num_result = session.run(
-        """
-        MATCH (p:Project {name: $project})-[:HAS_TASK|HAS_SUBTASK*]->(t:Task)
-        RETURN COALESCE(MAX(t.number), 0) + 1 AS next_number
-        """,
-        project=project_name,
-    )
-    num_record = num_result.single()
-    next_number = num_record["next_number"] if num_record else 1
-
+    """Create a subtask linked to a parent task via HAS_SUBTASK. Atomic numbering."""
     now = _now()
-    props = {
-        "number": next_number,
+    props: dict[str, Any] = {
         "description": description,
         "status": fields.get("status", "todo"),
         "created_at": now,
@@ -278,16 +282,19 @@ def create_subtask(
     result = session.run(
         """
         MATCH (p:Project {name: $project})-[:HAS_TASK]->(parent:Task {number: $parent_number})
+        OPTIONAL MATCH (p)-[:HAS_TASK|HAS_SUBTASK*]->(existing:Task)
+        WITH parent, COALESCE(MAX(existing.number), 0) + 1 AS next_number
         CREATE (parent)-[:HAS_SUBTASK]->(t:Task $props)
+        SET t.number = next_number
         RETURN t {.*} AS task
         """,
-        project=project_name, parent_number=parent_task_number, props=props,
+        project=project_name,
+        parent_number=parent_task_number,
+        props=props,
     )
     record = result.single()
     if record is None:
-        raise ValueError(
-            f"Parent task #{parent_task_number} not found in project '{project_name}'"
-        )
+        raise ValueError(f"Parent task #{parent_task_number} not found in project '{project_name}'")
     return dict(record["task"])
 
 
@@ -299,7 +306,8 @@ def list_subtasks(session: Session, project_name: str, task_number: int) -> list
         RETURN sub {.*} AS task
         ORDER BY sub.number
         """,
-        project=project_name, number=task_number,
+        project=project_name,
+        number=task_number,
     )
     return [dict(r["task"]) for r in result]
 
@@ -307,6 +315,7 @@ def list_subtasks(session: Session, project_name: str, task_number: int) -> list
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
+
 
 def add_dependency(
     session: Session,
@@ -322,7 +331,9 @@ def add_dependency(
         MERGE (t1)-[r:DEPENDS_ON]->(t2)
         RETURN r
         """,
-        project=project_name, num1=task_number, num2=depends_on_number,
+        project=project_name,
+        num1=task_number,
+        num2=depends_on_number,
     )
     return result.single() is not None
 
@@ -340,15 +351,15 @@ def remove_dependency(
         DELETE r
         RETURN count(r) AS deleted
         """,
-        project=project_name, num1=task_number, num2=depends_on_number,
+        project=project_name,
+        num1=task_number,
+        num2=depends_on_number,
     )
     record = result.single()
     return record is not None and record["deleted"] > 0
 
 
-def get_dependencies(
-    session: Session, project_name: str, task_number: int
-) -> list[dict]:
+def get_dependencies(session: Session, project_name: str, task_number: int) -> list[dict]:
     """Get tasks that a given task depends on."""
     result = session.run(
         """
@@ -357,7 +368,8 @@ def get_dependencies(
         RETURN dep {.*} AS task
         ORDER BY dep.number
         """,
-        project=project_name, number=task_number,
+        project=project_name,
+        number=task_number,
     )
     return [dict(r["task"]) for r in result]
 
@@ -365,6 +377,7 @@ def get_dependencies(
 # ---------------------------------------------------------------------------
 # Section
 # ---------------------------------------------------------------------------
+
 
 def create_section(
     session: Session,
@@ -382,14 +395,15 @@ def create_section(
         })
         RETURN s {.*} AS section
         """,
-        project=project_name, number=task_number,
-        type=section_type, content=content, now=now,
+        project=project_name,
+        number=task_number,
+        type=section_type,
+        content=content,
+        now=now,
     )
     record = result.single()
     if record is None:
-        raise ValueError(
-            f"Task #{task_number} not found in project '{project_name}'"
-        )
+        raise ValueError(f"Task #{task_number} not found in project '{project_name}'")
     return dict(record["section"])
 
 
@@ -402,7 +416,9 @@ def get_section(
               -[:HAS_SECTION]->(s:Section {type: $type})
         RETURN s {.*} AS section
         """,
-        project=project_name, number=task_number, type=section_type,
+        project=project_name,
+        number=task_number,
+        type=section_type,
     )
     record = result.single()
     return dict(record["section"]) if record else None
@@ -422,14 +438,15 @@ def update_section(
         SET s.content = $content, s.updated_at = $now
         RETURN s {.*} AS section
         """,
-        project=project_name, number=task_number,
-        type=section_type, content=content, now=_now(),
+        project=project_name,
+        number=task_number,
+        type=section_type,
+        content=content,
+        now=_now(),
     )
     record = result.single()
     if record is None:
-        raise ValueError(
-            f"Section '{section_type}' not found for task #{task_number}"
-        )
+        raise ValueError(f"Section '{section_type}' not found for task #{task_number}")
     return dict(record["section"])
 
 
@@ -450,7 +467,9 @@ def delete_section(
         DETACH DELETE s, f, c, reply
         RETURN count(*) AS deleted
         """,
-        project=project_name, number=task_number, type=section_type,
+        project=project_name,
+        number=task_number,
+        type=section_type,
     )
     record = result.single()
     return record is not None and record["deleted"] > 0
@@ -459,6 +478,7 @@ def delete_section(
 # ---------------------------------------------------------------------------
 # Finding
 # ---------------------------------------------------------------------------
+
 
 def create_finding(
     session: Session,
@@ -486,14 +506,14 @@ def create_finding(
         CREATE (s)-[:HAS_FINDING]->(f:Finding $props)
         RETURN f {.*} AS finding, elementId(f) AS finding_id
         """,
-        project=project_name, number=task_number,
-        section_type=section_type, props=props,
+        project=project_name,
+        number=task_number,
+        section_type=section_type,
+        props=props,
     )
     record = result.single()
     if record is None:
-        raise ValueError(
-            f"Section '{section_type}' not found for task #{task_number}"
-        )
+        raise ValueError(f"Section '{section_type}' not found for task #{task_number}")
     finding = dict(record["finding"])
     finding["element_id"] = record["finding_id"]
     return finding
@@ -563,6 +583,7 @@ def list_findings(
 # Comment
 # ---------------------------------------------------------------------------
 
+
 def create_comment(session: Session, finding_element_id: str, text: str, author: str) -> dict:
     now = _now()
     result = session.run(
@@ -571,7 +592,10 @@ def create_comment(session: Session, finding_element_id: str, text: str, author:
         CREATE (f)-[:HAS_COMMENT]->(c:Comment {text: $text, author: $author, created_at: $now})
         RETURN c {.*} AS comment, elementId(c) AS comment_id
         """,
-        fid=finding_element_id, text=text, author=author, now=now,
+        fid=finding_element_id,
+        text=text,
+        author=author,
+        now=now,
     )
     record = result.single()
     if record is None:
@@ -589,7 +613,10 @@ def reply_to_comment(session: Session, comment_element_id: str, text: str, autho
         CREATE (parent)-[:REPLIED_BY]->(reply:Comment {text: $text, author: $author, created_at: $now})
         RETURN reply {.*} AS comment, elementId(reply) AS comment_id
         """,
-        cid=comment_element_id, text=text, author=author, now=now,
+        cid=comment_element_id,
+        text=text,
+        author=author,
+        now=now,
     )
     record = result.single()
     if record is None:
@@ -624,6 +651,7 @@ def list_comments(session: Session, finding_element_id: str) -> list[dict]:
 # WorkflowRun / WorkflowStep
 # ---------------------------------------------------------------------------
 
+
 def create_workflow_run(
     session: Session,
     project_name: str,
@@ -639,7 +667,10 @@ def create_workflow_run(
         })
         RETURN wr {.*} AS workflow_run, elementId(wr) AS run_id
         """,
-        project=project_name, number=task_number, type=workflow_type, now=now,
+        project=project_name,
+        number=task_number,
+        type=workflow_type,
+        now=now,
     )
     record = result.single()
     if record is None:
@@ -652,7 +683,7 @@ def create_workflow_run(
 def update_workflow_run(session: Session, element_id: str, status: str) -> dict:
     params: dict[str, Any] = {"eid": element_id, "status": status}
     set_clause = "SET wr.status = $status"
-    if status == "completed" or status == "failed":
+    if status in ("completed", "failed"):
         set_clause += ", wr.completed_at = $now"
         params["now"] = _now()
 
@@ -683,7 +714,8 @@ def create_workflow_step(
         })
         RETURN ws {.*} AS workflow_step, elementId(ws) AS step_id
         """,
-        rid=run_element_id, name=name,
+        rid=run_element_id,
+        name=name,
     )
     record = result.single()
     if record is None:
@@ -701,7 +733,7 @@ def update_workflow_step(
 ) -> dict:
     params: dict[str, Any] = {"eid": element_id, "status": status}
     set_clause = "SET ws.status = $status"
-    if status in ("running",):
+    if status == "running":
         set_clause += ", ws.started_at = $now"
         params["now"] = _now()
     elif status in ("completed", "failed"):

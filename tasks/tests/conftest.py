@@ -12,6 +12,12 @@ _NEO4J_TEST_PASSWORD = "testpassword123"
 _NEO4J_CANDIDATE_URIS = ["bolt://docker:7687", "bolt://localhost:7687"]
 
 
+def _get_test_auth() -> tuple[str, str]:
+    user = os.environ.get("NEO4J_TEST_USER", _NEO4J_TEST_USER)
+    password = os.environ.get("NEO4J_TEST_PASSWORD", _NEO4J_TEST_PASSWORD)
+    return user, password
+
+
 def _resolve_neo4j_uri() -> str | None:
     """Find a working Neo4j URI, trying candidates in order."""
     explicit = os.environ.get("NEO4J_TEST_URI")
@@ -20,12 +26,10 @@ def _resolve_neo4j_uri() -> str | None:
 
     from neo4j import GraphDatabase
 
-    user = os.environ.get("NEO4J_TEST_USER", _NEO4J_TEST_USER)
-    password = os.environ.get("NEO4J_TEST_PASSWORD", _NEO4J_TEST_PASSWORD)
-
+    auth = _get_test_auth()
     for uri in _NEO4J_CANDIDATE_URIS:
         try:
-            driver = GraphDatabase.driver(uri, auth=(user, password))
+            driver = GraphDatabase.driver(uri, auth=auth)
             driver.verify_connectivity()
             driver.close()
             return uri
@@ -72,10 +76,8 @@ def neo4j_driver():
     if uri is None:
         pytest.skip("Neo4j is not available")
 
-    user = os.environ.get("NEO4J_TEST_USER", _NEO4J_TEST_USER)
-    password = os.environ.get("NEO4J_TEST_PASSWORD", _NEO4J_TEST_PASSWORD)
-
-    driver = GraphDatabase.driver(uri, auth=(user, password))
+    auth = _get_test_auth()
+    driver = GraphDatabase.driver(uri, auth=auth)
     driver.verify_connectivity()
     yield driver
     driver.close()
@@ -98,21 +100,9 @@ def neo4j_client():
     if uri is None:
         pytest.skip("Neo4j is not available")
 
-    user = os.environ.get("NEO4J_TEST_USER", _NEO4J_TEST_USER)
-    password = os.environ.get("NEO4J_TEST_PASSWORD", _NEO4J_TEST_PASSWORD)
-
-    client = GraphClient(uri=uri, auth=(user, password))
+    auth = _get_test_auth()
+    client = GraphClient(uri=uri, auth=auth)
     with client.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
     yield client
     client.close()
-
-
-@pytest.fixture
-def neo4j_clean_db(neo4j_driver):
-    """Clean the database before test (just data, not schema)."""
-    with neo4j_driver.session() as session:
-        session.run("MATCH (n) DETACH DELETE n")
-    yield
-    with neo4j_driver.session() as session:
-        session.run("MATCH (n) DETACH DELETE n")

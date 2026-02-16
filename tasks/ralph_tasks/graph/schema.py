@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ralph_tasks.graph.client import GraphClient
+
+logger = logging.getLogger(__name__)
 
 # Unique constraints (single-property — Neo4j CE limitation)
 CONSTRAINTS = [
@@ -26,11 +30,10 @@ FULLTEXT_INDEXES = [
         "CREATE FULLTEXT INDEX task_description_ft IF NOT EXISTS "
         "FOR (t:Task) ON EACH [t.description]"
     ),
-    (
-        "CREATE FULLTEXT INDEX finding_text_ft IF NOT EXISTS "
-        "FOR (f:Finding) ON EACH [f.text]"
-    ),
+    ("CREATE FULLTEXT INDEX finding_text_ft IF NOT EXISTS FOR (f:Finding) ON EACH [f.text]"),
 ]
+
+_SAFE_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 def ensure_schema(client: GraphClient) -> None:
@@ -39,11 +42,7 @@ def ensure_schema(client: GraphClient) -> None:
     Safe to call multiple times — all statements use IF NOT EXISTS.
     """
     with client.session() as session:
-        for stmt in CONSTRAINTS:
-            session.run(stmt)
-        for stmt in INDEXES:
-            session.run(stmt)
-        for stmt in FULLTEXT_INDEXES:
+        for stmt in CONSTRAINTS + INDEXES + FULLTEXT_INDEXES:
             session.run(stmt)
 
 
@@ -53,10 +52,18 @@ def drop_schema(client: GraphClient) -> None:
         # Drop constraints
         result = session.run("SHOW CONSTRAINTS YIELD name RETURN name")
         for record in result:
-            session.run(f"DROP CONSTRAINT {record['name']} IF EXISTS")
+            name = record["name"]
+            if not _SAFE_IDENTIFIER.match(name):
+                logger.warning("Skipping constraint with unexpected name: %r", name)
+                continue
+            session.run(f"DROP CONSTRAINT `{name}` IF EXISTS")
         # Drop indexes
         result = session.run("SHOW INDEXES YIELD name, type RETURN name, type")
         for record in result:
             # Skip lookup indexes (system-managed)
             if record["type"] != "LOOKUP":
-                session.run(f"DROP INDEX {record['name']} IF EXISTS")
+                name = record["name"]
+                if not _SAFE_IDENTIFIER.match(name):
+                    logger.warning("Skipping index with unexpected name: %r", name)
+                    continue
+                session.run(f"DROP INDEX `{name}` IF EXISTS")

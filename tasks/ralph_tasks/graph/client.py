@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
+from typing import Any
 
 from neo4j import Driver, GraphDatabase, Session
+
+logger = logging.getLogger(__name__)
 
 
 class GraphClient:
@@ -49,26 +53,33 @@ class GraphClient:
             self.driver.verify_connectivity()
             return True
         except Exception:
+            logger.warning(
+                "Neo4j connectivity check failed for URI=%s",
+                self._uri,
+                exc_info=True,
+            )
             return False
 
-    def session(self, **kwargs) -> Session:
+    def session(self, **kwargs: Any) -> Session:
         """Create a new session."""
         return self.driver.session(**kwargs)
 
-    def execute_read(self, query: str, **params) -> list[dict]:
-        """Run a read query and return results as list of dicts."""
+    def execute_read(self, query: str, **params: Any) -> list[dict]:
+        """Run a read query using a managed read transaction."""
         with self.session() as session:
-            result = session.run(query, params)
-            return [record.data() for record in result]
+            return session.execute_read(
+                lambda tx: [record.data() for record in tx.run(query, params)]
+            )
 
-    def execute_write(self, query: str, **params) -> list[dict]:
-        """Run a write query and return results as list of dicts."""
+    def execute_write(self, query: str, **params: Any) -> list[dict]:
+        """Run a write query using a managed write transaction."""
         with self.session() as session:
-            result = session.run(query, params)
-            return [record.data() for record in result]
+            return session.execute_write(
+                lambda tx: [record.data() for record in tx.run(query, params)]
+            )
 
     def __enter__(self) -> GraphClient:
         return self
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, *args: object) -> None:
         self.close()

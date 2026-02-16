@@ -1,7 +1,6 @@
 """Tests for schema initialization: constraints and indexes."""
 
 import pytest
-
 from ralph_tasks.graph.schema import drop_schema, ensure_schema
 
 
@@ -63,8 +62,6 @@ class TestSchemaInit:
             constraints = list(result)
             assert len(constraints) == 0
 
-            result = session.run(
-                "SHOW INDEXES YIELD name, type WHERE type <> 'LOOKUP' RETURN name"
-            )
+            result = session.run("SHOW INDEXES YIELD name, type WHERE type <> 'LOOKUP' RETURN name")
             indexes = list(result)
             assert len(indexes) == 0

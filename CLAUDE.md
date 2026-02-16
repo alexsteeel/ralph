@@ -144,3 +144,11 @@ Use `--import-mode=importlib` in pytest config to avoid name collisions between 
 ### dependency-groups (PEP 735)
 
 `[tool.uv] dev-dependencies` is deprecated. Use `[dependency-groups] dev = [...]` instead.
+
+### Neo4j tests: auto-skip when unavailable
+
+Neo4j tests use `@pytest.mark.neo4j` marker and auto-skip when the database is unreachable. The test conftest tries `bolt://docker:7687` first (devcontainer DinD), then `bolt://localhost:7687`. Override via `NEO4J_TEST_URI` env var. Test credentials: `NEO4J_TEST_USER`/`NEO4J_TEST_PASSWORD` (defaults: `neo4j`/`testpassword123`).
+
+### `ralph review` inside nested Claude Code sessions
+
+`ralph review` CLI cannot run inside another Claude Code session (nested sessions crash). Use Task agents with `subagent_type="pr-review-toolkit:code-reviewer"` etc. as a workaround when running reviews from within Claude Code.

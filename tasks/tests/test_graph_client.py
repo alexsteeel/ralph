@@ -1,7 +1,6 @@
 """Tests for GraphClient: connectivity, sessions, context manager."""
 
 import pytest
-
 from ralph_tasks.graph.client import GraphClient
 
 

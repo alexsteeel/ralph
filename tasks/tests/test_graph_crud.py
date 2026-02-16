@@ -1,7 +1,6 @@
 """Tests for CRUD operations on all Neo4j node types."""
 
 import pytest
-
 from ralph_tasks.graph import crud
 
 
@@ -50,6 +49,10 @@ class TestProjectCRUD:
         crud.create_project(neo4j_session, "ws", "proj")
         with pytest.raises(ValueError, match="already exists"):
             crud.create_project(neo4j_session, "ws", "proj")
+
+    def test_create_project_invalid_parent_label_raises(self, neo4j_session):
+        with pytest.raises(ValueError, match="Invalid parent_label"):
+            crud.create_project(neo4j_session, "ws", "proj", parent_label="BadLabel")
 
     def test_create_project_nonexistent_parent_raises(self, neo4j_session):
         with pytest.raises(ValueError, match="not found"):
@@ -260,8 +263,13 @@ class TestFindingCRUD:
         crud.create_task(neo4j_session, "proj", "Task")
         crud.create_section(neo4j_session, "proj", 1, "code-review")
         finding = crud.create_finding(
-            neo4j_session, "proj", 1, "code-review",
-            text="Missing null check", author="reviewer", severity="major",
+            neo4j_session,
+            "proj",
+            1,
+            "code-review",
+            text="Missing null check",
+            author="reviewer",
+            severity="major",
         )
         assert finding["text"] == "Missing null check"
         assert finding["status"] == "open"
@@ -274,8 +282,12 @@ class TestFindingCRUD:
         crud.create_task(neo4j_session, "proj", "Task")
         crud.create_section(neo4j_session, "proj", 1, "code-review")
         finding = crud.create_finding(
-            neo4j_session, "proj", 1, "code-review",
-            text="Bug", author="reviewer",
+            neo4j_session,
+            "proj",
+            1,
+            "code-review",
+            text="Bug",
+            author="reviewer",
         )
         updated = crud.update_finding_status(neo4j_session, finding["element_id"], "resolved")
         assert updated["status"] == "resolved"
@@ -311,9 +323,7 @@ class TestCommentCRUD:
         crud.create_project(neo4j_session, "ws", "proj")
         crud.create_task(neo4j_session, "proj", "Task")
         crud.create_section(neo4j_session, "proj", 1, "code-review")
-        finding = crud.create_finding(
-            neo4j_session, "proj", 1, "code-review", "Issue", "reviewer"
-        )
+        finding = crud.create_finding(neo4j_session, "proj", 1, "code-review", "Issue", "reviewer")
         comment = crud.create_comment(
             neo4j_session, finding["element_id"], "Agreed, fixing.", "developer"
         )
@@ -325,15 +335,9 @@ class TestCommentCRUD:
         crud.create_project(neo4j_session, "ws", "proj")
         crud.create_task(neo4j_session, "proj", "Task")
         crud.create_section(neo4j_session, "proj", 1, "code-review")
-        finding = crud.create_finding(
-            neo4j_session, "proj", 1, "code-review", "Issue", "reviewer"
-        )
-        comment = crud.create_comment(
-            neo4j_session, finding["element_id"], "First comment", "dev"
-        )
-        reply = crud.reply_to_comment(
-            neo4j_session, comment["element_id"], "Reply", "reviewer"
-        )
+        finding = crud.create_finding(neo4j_session, "proj", 1, "code-review", "Issue", "reviewer")
+        comment = crud.create_comment(neo4j_session, finding["element_id"], "First comment", "dev")
+        reply = crud.reply_to_comment(neo4j_session, comment["element_id"], "Reply", "reviewer")
         assert reply["text"] == "Reply"
         assert reply["author"] == "reviewer"
 
@@ -342,9 +346,7 @@ class TestCommentCRUD:
         crud.create_project(neo4j_session, "ws", "proj")
         crud.create_task(neo4j_session, "proj", "Task")
         crud.create_section(neo4j_session, "proj", 1, "code-review")
-        finding = crud.create_finding(
-            neo4j_session, "proj", 1, "code-review", "Issue", "rev"
-        )
+        finding = crud.create_finding(neo4j_session, "proj", 1, "code-review", "Issue", "rev")
         crud.create_comment(neo4j_session, finding["element_id"], "C1", "dev")
         crud.create_comment(neo4j_session, finding["element_id"], "C2", "dev")
         comments = crud.list_comments(neo4j_session, finding["element_id"])

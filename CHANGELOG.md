@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- Neo4j graph database integration for ralph-tasks (#9)
+  - Neo4j as shared Docker service in docker-compose (container `ai-sbx-neo4j`)
+  - `GraphClient` wrapper with lazy driver init and managed transactions
+  - Idempotent schema initialization (constraints, indexes, full-text indexes)
+  - Full CRUD operations for 8 node types: Workspace, Project, Task, Section,
+    Finding, Comment, WorkflowRun, WorkflowStep
+  - Cascade delete for Task (removes sections, findings, comments, workflows)
+  - Atomic auto-increment task numbering (TOCTOU-safe)
+  - Cypher injection protection via `parent_label` whitelist and identifier validation
+  - Comprehensive tests: 68 Neo4j tests (unit + integration), auto-skip when unavailable
 - Final monorepo integration: Dockerfile, entrypoint, documentation (#7)
   - Dockerfile pip install URLs updated to monorepo (`ralph.git#subdirectory=...`)
   - entrypoint.sh MCP registration: `md-task-mcp` → `ralph-tasks`

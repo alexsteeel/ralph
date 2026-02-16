@@ -1,7 +1,6 @@
 """Integration tests: full lifecycle, recursive structures, cascade deletes."""
 
 import pytest
-
 from ralph_tasks.graph import crud
 from ralph_tasks.graph.schema import ensure_schema
 
@@ -37,8 +36,13 @@ class TestFullTaskLifecycle:
         # 6. Add code review section with findings
         crud.create_section(neo4j_session, "ralph", 1, "code-review")
         f1 = crud.create_finding(
-            neo4j_session, "ralph", 1, "code-review",
-            "Missing error handling", "code-reviewer", severity="major",
+            neo4j_session,
+            "ralph",
+            1,
+            "code-review",
+            "Missing error handling",
+            "code-reviewer",
+            severity="major",
         )
         assert f1["status"] == "open"
 
@@ -49,9 +53,7 @@ class TestFullTaskLifecycle:
         assert c1["author"] == "developer"
 
         # 8. Reply to comment
-        reply = crud.reply_to_comment(
-            neo4j_session, c1["element_id"], "Thanks!", "code-reviewer"
-        )
+        reply = crud.reply_to_comment(neo4j_session, c1["element_id"], "Thanks!", "code-reviewer")
         assert reply["text"] == "Thanks!"
 
         # 9. Resolve finding
@@ -128,9 +130,7 @@ class TestCascadeDelete:
         crud.create_project(neo4j_session, "ws", "proj")
         crud.create_task(neo4j_session, "proj", "Task")
         crud.create_section(neo4j_session, "proj", 1, "code-review")
-        finding = crud.create_finding(
-            neo4j_session, "proj", 1, "code-review", "Issue", "rev"
-        )
+        finding = crud.create_finding(neo4j_session, "proj", 1, "code-review", "Issue", "rev")
         crud.create_comment(neo4j_session, finding["element_id"], "Comment", "dev")
 
         # Delete task
