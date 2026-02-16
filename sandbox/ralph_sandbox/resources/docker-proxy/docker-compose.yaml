@@ -54,6 +54,23 @@ services:
       - ai-sbx-proxy-internal  # To receive requests from docker-registry-proxy
       - ai-sbx-proxy-external  # To access internet
 
+  # Neo4j graph database for task management
+  neo4j:
+    image: neo4j:2025
+    container_name: ai-sbx-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"  # HTTP browser
+      - "7687:7687"  # Bolt protocol
+    volumes:
+      - ai-sbx-neo4j-data:/data
+      - ai-sbx-neo4j-logs:/logs
+    environment:
+      NEO4J_AUTH: "${NEO4J_AUTH:-neo4j/neo4j-ai-sbx-password}"
+      NEO4J_PLUGINS: "[]"
+    networks:
+      - ai-sbx-proxy-internal
+
 networks:
   ai-sbx-proxy-external:
     name: ai-sbx-proxy-external
@@ -68,4 +85,10 @@ volumes:
     driver: local
   ai-sbx-proxy-certs:
     name: ai-sbx-proxy-certs
+    driver: local
+  ai-sbx-neo4j-data:
+    name: ai-sbx-neo4j-data
+    driver: local
+  ai-sbx-neo4j-logs:
+    name: ai-sbx-neo4j-logs
     driver: local
