@@ -49,11 +49,12 @@ Task
   ├── Section(description)        # контентная
   ├── Section(plan)               # контентная
   ├── Section(report)             # контентная
+  ├── Section(blocks)             # контентная
   ├── Section(code-review)        # ревью-секция
   ├── Section(codex-review)       # ревью-секция
   ├── Section(simplifier-review)  # ревью-секция
   ├── Section(security-review)    # ревью-секция
-  └── ...
+  └── Section(...)                # type — произвольная строка, новые типы без миграции
 ```
 
 Любая секция может содержать дерево замечаний:
@@ -100,8 +101,6 @@ Task
     number: int,            # уникальный в рамках Project
     description: str,
     status: str,            # todo | work | done | approved | hold
-    module: str | null,
-    branch: str | null,
     started: datetime | null,
     completed: datetime | null,
     created_at: datetime,
@@ -109,10 +108,11 @@ Task
 })
 
 (:Section {
-    type: str,              # description | plan | report |
-                            # code-review | codex-review | simplifier-review |
+    type: str,              # произвольная строка, новые типы добавляются без миграции
+                            # контентные: description | plan | report | blocks
+                            # ревью: code-review | codex-review | simplifier-review |
                             # security-review | pr-test-review | comment-review |
-                            # type-design-review | silent-failure-review
+                            # type-design-review | silent-failure-review | ...
     content: str,
     created_at: datetime,
     updated_at: datetime
