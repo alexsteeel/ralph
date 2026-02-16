@@ -77,6 +77,7 @@ uv run ralph-tasks serve
 - **Flat layout** — `tasks/ralph_tasks/`, not `tasks/src/ralph_tasks/`
 - **Per-package tests** — each package has its own `tests/` directory
 - **`--import-mode=importlib`** — avoids name collisions in monorepo test collection
+- **Target architecture (graph-first)** — `docs/target-architecture.md`
 
 ## Docker
 

@@ -89,6 +89,18 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+### Devcontainer networking
+
+Devcontainer uses Docker-in-Docker (DinD). The DinD service is named `docker` in docker-compose. Containers started via `docker run` inside devcontainer run inside DinD. Their mapped ports are accessible from devcontainer by hostname `docker`:
+
+```
+bolt://docker:7687    # Neo4j Bolt
+http://docker:7474    # Neo4j HTTP
+http://docker:<port>  # Any container port mapped with -p
+```
+
+Direct access to Docker bridge IPs (172.17.x.x) is blocked by tinyproxy. Always use `docker:<port>`.
+
 ### Docker
 
 Packages are installed in devcontainers from the monorepo via git URLs:
