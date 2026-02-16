@@ -184,6 +184,10 @@ def check_skipped_tests_in_repo(working_dir: str | None = None) -> list[str]:
                 # Skip lines with skipif (conditional skip is allowed)
                 if "skipif" in line.lower():
                     continue
+                # Skip this hook file itself (contains skip references in
+                # comments, docstrings, and grep commands)
+                if "check_workflow_ralph.py" in line:
+                    continue
                 # Only include test files
                 if "test" in line.lower():
                     # Format: file:line:content -> take file:line

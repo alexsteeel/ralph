@@ -1,5 +1,6 @@
 """Review command - run code reviews in isolated contexts."""
 
+import os
 import subprocess
 import time
 from datetime import datetime
@@ -12,6 +13,14 @@ from rich.table import Table
 from ..config import Settings, get_settings
 from ..logging import format_duration
 from ..notify import Notifier
+
+# Env vars that prevent nested Claude Code sessions
+_CLAUDE_SESSION_VARS = {"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"}
+
+
+def _clean_env() -> dict[str, str]:
+    """Return env dict without Claude session vars to allow nested launches."""
+    return {k: v for k, v in os.environ.items() if k not in _CLAUDE_SESSION_VARS}
 
 console = Console()
 
@@ -134,6 +143,7 @@ def run_single_review(
         with open(log_path, "w") as log_file:
             result = subprocess.run(
                 cmd,
+                env=_clean_env(),
                 stdin=subprocess.DEVNULL,  # Prevent hang when running from another Claude session
                 stdout=log_file,
                 stderr=subprocess.STDOUT,

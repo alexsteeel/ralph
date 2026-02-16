@@ -1,5 +1,6 @@
 """Claude process execution."""
 
+import os
 import re
 import subprocess
 import sys
@@ -11,6 +12,14 @@ from typing import TextIO
 from .errors import ErrorType, classify_from_text
 from .logging import TaskLog, format_duration
 from .monitor import StreamMonitor
+
+# Env vars that prevent nested Claude Code sessions
+_CLAUDE_SESSION_VARS = {"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"}
+
+
+def _clean_env() -> dict[str, str]:
+    """Return env dict without Claude session vars to allow nested launches."""
+    return {k: v for k, v in os.environ.items() if k not in _CLAUDE_SESSION_VARS}
 
 
 @dataclass
@@ -143,6 +152,7 @@ def run_claude(
         process = subprocess.Popen(
             cmd,
             cwd=working_dir,
+            env=_clean_env(),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
