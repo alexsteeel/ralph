@@ -2,8 +2,8 @@
 Core API for ralph-tasks — Neo4j-backed task management.
 
 Provides a clean public API for task/project CRUD operations.
-All data is stored in Neo4j graph database, except attachments
-which remain file-based.
+All data is stored in Neo4j graph database.
+Attachments are stored in MinIO (S3-compatible object storage).
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-import shutil
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -21,6 +20,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from neo4j import Session
 
+from minio.error import S3Error
+from urllib3.exceptions import HTTPError as Urllib3HTTPError
+
+from ralph_tasks import storage
 from ralph_tasks.graph import crud
 from ralph_tasks.graph.client import GraphClient
 from ralph_tasks.graph.schema import ensure_schema
@@ -59,7 +62,7 @@ if not logger.handlers:
     except Exception:
         logger.addHandler(logging.NullHandler())
 logger.info(
-    f"md-task-mcp core loaded (Neo4j). BASE_DIR={BASE_DIR}, uid={os.getuid()}, gid={os.getgid()}"
+    f"md-task-mcp core loaded (Neo4j + MinIO). BASE_DIR={BASE_DIR}, uid={os.getuid()}, gid={os.getgid()}"
 )
 
 
@@ -218,22 +221,6 @@ def _task_from_graph(d: dict) -> Task:
         depends_on=d.get("depends_on", []),
         updated_at=d.get("updated_at", ""),
     )
-
-
-def _safe_name(name: str) -> str:
-    """Sanitize a name for use in filesystem paths (prevent path traversal)."""
-    safe = Path(name).name
-    if not safe or safe != name:
-        raise ValueError(f"Invalid name (contains path separators or is empty): {name!r}")
-    return safe
-
-
-def _get_attachment_dir(project: str, number: int, create: bool = False) -> Path:
-    """Get attachment directory: ~/.md-task-mcp/<project>/attachments/<NNN>/"""
-    att_dir = BASE_DIR / _safe_name(project) / "attachments" / f"{number:03d}"
-    if create:
-        att_dir.mkdir(parents=True, exist_ok=True)
-    return att_dir
 
 
 # ---------------------------------------------------------------------------
@@ -408,97 +395,79 @@ def update_task(project: str, number: int, **fields: Any) -> Task:
 
 
 def delete_task(project: str, number: int) -> bool:
-    """Delete a task and its attachments."""
+    """Delete a task and its attachments from Neo4j and MinIO."""
     with _session() as session:
         deleted = crud.delete_task(session, project, number)
 
     if deleted:
-        att_dir = _get_attachment_dir(project, number)
-        if att_dir.exists():
-            shutil.rmtree(att_dir)
-            logger.info(f"Deleted attachments directory: {att_dir}")
+        try:
+            count = storage.delete_all_objects(project, number)
+            if count:
+                logger.info(f"Deleted {count} attachments for {project}#{number} from MinIO")
+        except (S3Error, Urllib3HTTPError, OSError) as e:
+            logger.warning(f"Failed to delete attachments from MinIO for {project}#{number}: {e}")
 
     return deleted
 
 
 # ---------------------------------------------------------------------------
-# Attachments (file-based)
+# Attachments (MinIO S3 storage)
 # ---------------------------------------------------------------------------
 
 
 def list_attachments(project: str, number: int) -> list[dict]:
-    """List all attachments for a task."""
-    att_dir = _get_attachment_dir(project, number)
-    if not att_dir.exists():
-        return []
-
-    return [
-        {"name": f.name, "path": str(f), "size": f.stat().st_size}
-        for f in sorted(att_dir.iterdir())
-        if f.is_file()
-    ]
+    """List all attachments for a task from MinIO."""
+    return storage.list_objects(project, number)
 
 
 def save_attachment(project: str, number: int, filename: str, content: bytes) -> dict:
-    """Save attachment content to a task. For web upload."""
-    att_dir = _get_attachment_dir(project, number, create=True)
+    """Save attachment content to MinIO. For web upload.
+
+    Returns {"name": str, "size": int}.
+    """
     safe_filename = Path(filename).name
     if not safe_filename:
         raise ValueError("Invalid filename")
 
-    file_path = att_dir / safe_filename
-    file_path.write_bytes(content)
-    logger.info(f"Saved attachment: {file_path} ({len(content)} bytes)")
-    return {"name": file_path.name, "path": str(file_path), "size": len(content)}
+    result = storage.put_bytes(project, number, safe_filename, content)
+    logger.info(
+        f"Saved attachment to MinIO: {project}/{number:03d}/{safe_filename} ({len(content)} bytes)"
+    )
+    return {"name": result["name"], "size": result["size"]}
 
 
 def copy_attachment(
     project: str, number: int, source_path: str, filename: str | None = None
 ) -> dict:
-    """Copy a file to task attachments. For MCP."""
+    """Copy a local file to MinIO as task attachment. For MCP.
+
+    Returns {"name": str, "size": int}.
+    """
     source = Path(source_path)
     if not source.exists():
         raise FileNotFoundError(f"Source file not found: {source_path}")
 
-    att_dir = _get_attachment_dir(project, number, create=True)
     target_filename = Path(filename).name if filename else source.name
     if not target_filename:
         raise ValueError("Invalid filename")
-    target_path = att_dir / target_filename
-    shutil.copy2(source, target_path)
-    logger.info(f"Copied attachment: {source} -> {target_path}")
-    return {
-        "name": target_path.name,
-        "path": str(target_path),
-        "size": target_path.stat().st_size,
-    }
+
+    content = source.read_bytes()
+    result = storage.put_bytes(project, number, target_filename, content)
+    logger.info(f"Copied attachment to MinIO: {source} -> {project}/{number:03d}/{target_filename}")
+    return {"name": result["name"], "size": result["size"]}
 
 
-def get_attachment_path(project: str, number: int, filename: str) -> Path | None:
-    """Get path to attachment file. Returns None if not found."""
-    att_dir = _get_attachment_dir(project, number)
+def get_attachment_bytes(project: str, number: int, filename: str) -> bytes | None:
+    """Get attachment content from MinIO. Returns None if not found."""
     safe_filename = Path(filename).name
     if not safe_filename:
         return None
-    file_path = att_dir / safe_filename
-    if file_path.exists() and file_path.is_file():
-        return file_path
-    return None
+    return storage.get_object(project, number, safe_filename)
 
 
 def delete_attachment(project: str, number: int, filename: str) -> bool:
-    """Delete an attachment. Returns True if deleted, False if not found."""
-    file_path = get_attachment_path(project, number, filename)
-    if file_path is None:
+    """Delete an attachment from MinIO. Returns True if deleted."""
+    safe_filename = Path(filename).name
+    if not safe_filename:
         return False
-
-    file_path.unlink()
-    logger.info(f"Deleted attachment: {file_path}")
-
-    # Remove empty directory
-    att_dir = file_path.parent
-    if att_dir.exists() and not any(att_dir.iterdir()):
-        att_dir.rmdir()
-        logger.debug(f"Removed empty attachments directory: {att_dir}")
-
-    return True
+    return storage.delete_object(project, number, safe_filename)

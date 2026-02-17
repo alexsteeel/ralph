@@ -9,10 +9,14 @@ Optimized 3-tool design:
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from fastmcp import FastMCP
 
 from .core import (
     copy_attachment,
+    get_attachment_bytes,
     project_exists,
 )
 from .core import (
@@ -38,6 +42,9 @@ from .core import (
 )
 
 mcp = FastMCP("ralph-tasks")
+
+# Temp directory for read_attachment downloads
+_ATTACHMENT_CACHE_DIR = Path(tempfile.gettempdir()) / "ralph-attachments"
 
 
 def _require_task(project: str, number: int) -> None:
@@ -207,11 +214,11 @@ def list_attachments(project: str, number: int) -> list[dict]:
         number: Task number
 
     Returns:
-        List of attachments: [{"name": "file.png", "path": "/full/path", "size": 1234}, ...]
+        List of attachments: [{"name": "file.png", "size": 1234}, ...]
 
     Note:
-        Use Claude's Read tool to view attachment contents.
-        Read tool supports images (PNG, JPG, etc.) natively.
+        Use read_attachment tool to download an attachment for viewing.
+        Then use Claude's Read tool on the returned path.
     """
     _require_task(project, number)
     return _list_attachments(project, number)
@@ -234,11 +241,50 @@ def add_attachment(
         filename: Optional new filename (default: use source filename)
 
     Returns:
-        {"ok": True, "name": "filename", "path": "/full/path", "size": 1234}
+        {"ok": True, "name": "filename", "size": 1234}
     """
     _require_task(project, number)
     result = copy_attachment(project, number, source_path, filename)
     return {"ok": True, **result}
+
+
+@mcp.tool
+def read_attachment(project: str, number: int, filename: str) -> dict:
+    """
+    Download an attachment from MinIO to a local temp path for reading.
+
+    Args:
+        project: Project name
+        number: Task number
+        filename: Name of the attachment file
+
+    Returns:
+        {"ok": True, "name": "filename", "path": "/tmp/ralph-attachments/...", "size": 1234}
+
+    Note:
+        Use Claude's Read tool on the returned path to view the file.
+        Read tool supports images (PNG, JPG, etc.) natively.
+    """
+    _require_task(project, number)
+
+    content = get_attachment_bytes(project, number, filename)
+    if content is None:
+        raise ValueError(f"Attachment '{filename}' not found for task #{number}")
+
+    # Write to temp location (sanitize project name for filesystem path)
+    safe_project = "".join(c for c in project if c.isalnum() or c in "-_.")
+    safe_name = Path(filename).name
+    cache_dir = _ATTACHMENT_CACHE_DIR / safe_project / f"{number:03d}"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    local_path = cache_dir / safe_name
+    local_path.write_bytes(content)
+
+    return {
+        "ok": True,
+        "name": filename,
+        "path": str(local_path),
+        "size": len(content),
+    }
 
 
 @mcp.tool

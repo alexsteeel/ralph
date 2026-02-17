@@ -469,6 +469,7 @@ def init_global(
                 system_changes["docker_containers_started"].append("ai-sbx-docker-proxy")
                 system_changes["docker_containers_started"].append("ai-sbx-tinyproxy-registry")
                 system_changes["docker_containers_started"].append("ai-sbx-neo4j")
+                system_changes["docker_containers_started"].append("ai-sbx-minio")
             else:
                 console.print("[yellow]⚠ Could not find docker-proxy configuration[/yellow]")
         else:

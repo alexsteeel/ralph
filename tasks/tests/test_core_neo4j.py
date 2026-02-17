@@ -205,15 +205,17 @@ class TestDeleteTask:
         assert core.delete_task("proj", 1) is True
         assert core.get_task("proj", 1) is None
 
-    def test_delete_task_with_attachments(self, graph_core, tmp_path):
+    @pytest.mark.minio
+    def test_delete_task_with_attachments(self, graph_core, minio_storage):
         core.create_task("proj", "Task")
-        # Create attachment
-        att_dir = tmp_path / "proj" / "attachments" / "001"
-        att_dir.mkdir(parents=True)
-        (att_dir / "test.txt").write_text("data")
+        core.save_attachment("proj", 1, "test.txt", b"data")
+        assert core.list_attachments("proj", 1) != []
 
         assert core.delete_task("proj", 1) is True
-        assert not att_dir.exists()
+
+        from ralph_tasks import storage
+
+        assert storage.list_objects("proj", 1) == []
 
 
 @pytest.mark.neo4j
@@ -249,46 +251,6 @@ class TestToDict:
         d = task.to_dict()
         # updated_at is set by Neo4j, so mtime should be > 0
         assert d["mtime"] > 0
-
-
-@pytest.mark.neo4j
-class TestAttachmentCRUD:
-    def test_list_attachments_empty(self, graph_core):
-        core.create_task("proj", "Task")
-        assert core.list_attachments("proj", 1) == []
-
-    def test_save_and_list_attachment(self, graph_core):
-        core.create_task("proj", "Task")
-        result = core.save_attachment("proj", 1, "test.txt", b"hello")
-        assert result["name"] == "test.txt"
-        assert result["size"] == 5
-
-        attachments = core.list_attachments("proj", 1)
-        assert len(attachments) == 1
-        assert attachments[0]["name"] == "test.txt"
-
-    def test_copy_attachment(self, graph_core, tmp_path):
-        core.create_task("proj", "Task")
-        source = tmp_path / "source.txt"
-        source.write_text("source content")
-
-        result = core.copy_attachment("proj", 1, str(source))
-        assert result["name"] == "source.txt"
-
-    def test_delete_attachment(self, graph_core):
-        core.create_task("proj", "Task")
-        core.save_attachment("proj", 1, "del.txt", b"data")
-        assert core.delete_attachment("proj", 1, "del.txt") is True
-        assert core.delete_attachment("proj", 1, "del.txt") is False
-
-    def test_get_attachment_path(self, graph_core):
-        core.create_task("proj", "Task")
-        core.save_attachment("proj", 1, "file.bin", b"\x00\x01")
-        path = core.get_attachment_path("proj", 1, "file.bin")
-        assert path is not None
-        assert path.name == "file.bin"
-
-        assert core.get_attachment_path("proj", 1, "missing.txt") is None
 
 
 @pytest.mark.neo4j

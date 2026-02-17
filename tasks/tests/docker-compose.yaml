@@ -11,3 +11,16 @@ services:
     tmpfs:
       - /data
       - /logs
+
+  minio-test:
+    image: minio/minio:latest
+    container_name: minio-test
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    environment:
+      MINIO_ROOT_USER: "minioadmin"
+      MINIO_ROOT_PASSWORD: "minioadmin"
+    command: server /data --console-address ":9001"
+    tmpfs:
+      - /data

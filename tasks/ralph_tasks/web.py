@@ -1,12 +1,13 @@
 """Web UI for task management (kanban board + project overview)."""
 
+import io
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
@@ -14,7 +15,7 @@ from .core import (
     Task,
     delete_attachment,
     delete_task,
-    get_attachment_path,
+    get_attachment_bytes,
     get_project_description,
     get_task,
     list_attachments,
@@ -293,15 +294,19 @@ async def upload_attachment_endpoint(project: str, number: int, file: UploadFile
 
 @app.get("/api/task/{project}/{number}/attachments/{filename:path}")
 async def download_attachment_endpoint(project: str, number: int, filename: str):
-    """Download an attachment."""
-    file_path = get_attachment_path(project, number, filename)
-    if file_path is None:
+    """Download an attachment from MinIO as a streaming response."""
+    content = get_attachment_bytes(project, number, filename)
+    if content is None:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    return FileResponse(
-        path=file_path,
-        filename=filename,
+    return StreamingResponse(
+        io.BytesIO(content),
         media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": 'attachment; filename="{}"'.format(
+                Path(filename).name.replace("\\", "\\\\").replace('"', '\\"')
+            )
+        },
     )
 
 

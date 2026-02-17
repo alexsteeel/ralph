@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+- **tasks: MinIO S3 attachment storage** (#35)
+  - New `ralph_tasks/storage.py` — S3 storage module with lazy-singleton MinIO client
+  - Object keys: `{project}/{NNN}/{filename}` with input sanitization (`_sanitize_key_component`)
+  - Public API: `put_bytes`, `get_object`, `list_objects`, `delete_object`, `delete_all_objects`, `object_exists`, `get_presigned_url`
+  - New MCP tool `read_attachment` — downloads from MinIO to temp path for Claude's Read tool
+  - Web download endpoint uses `StreamingResponse` instead of `FileResponse`
+  - Content-Disposition header injection protection (escaping quotes/backslashes)
+  - MinIO dev service in docker-compose (`ai-sbx-minio`, ports 9000/9001)
+  - MinIO test service in `tasks/tests/docker-compose.yaml` (port 19000, tmpfs)
+  - `@pytest.mark.minio` with auto-skip when MinIO unavailable (pattern matches Neo4j)
+  - New tests: `test_storage.py` (18 tests), `test_attachments.py` (13 tests)
+  - Dependency: `minio>=7.0`
+
 ### Changed
 - **sandbox: Docker build from monorepo root instead of git+https** (#23)
   - Replaced `git+https://github.com/...` package installation in devcontainer Dockerfile with local `COPY + pip install` from monorepo

@@ -54,6 +54,23 @@ services:
       - ai-sbx-proxy-internal  # To receive requests from docker-registry-proxy
       - ai-sbx-proxy-external  # To access internet
 
+  # MinIO S3-compatible object storage for task attachments
+  minio:
+    image: minio/minio:latest
+    container_name: ai-sbx-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console UI
+    volumes:
+      - ai-sbx-minio-data:/data
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+    command: server /data --console-address ":9001"
+    networks:
+      - ai-sbx-proxy-internal
+
   # Neo4j graph database for task management
   neo4j:
     image: neo4j:2025
@@ -85,6 +102,9 @@ volumes:
     driver: local
   ai-sbx-proxy-certs:
     name: ai-sbx-proxy-certs
+    driver: local
+  ai-sbx-minio-data:
+    name: ai-sbx-minio-data
     driver: local
   ai-sbx-neo4j-data:
     name: ai-sbx-neo4j-data

@@ -96,6 +96,8 @@ Devcontainer uses Docker-in-Docker (DinD). The DinD service is named `docker` in
 ```
 bolt://docker:7687    # Neo4j Bolt
 http://docker:7474    # Neo4j HTTP
+http://docker:9000    # MinIO S3 API
+http://docker:9001    # MinIO Console
 http://docker:<port>  # Any container port mapped with -p
 ```
 
@@ -153,6 +155,21 @@ Use `--import-mode=importlib` in pytest config to avoid name collisions between 
 ### Neo4j tests: auto-skip when unavailable
 
 Neo4j tests use `@pytest.mark.neo4j` marker and auto-skip when the database is unreachable. The test conftest tries `bolt://docker:7687` first (devcontainer DinD), then `bolt://localhost:7687`. Override via `NEO4J_TEST_URI` env var. Test credentials: `NEO4J_TEST_USER`/`NEO4J_TEST_PASSWORD` (defaults: `neo4j`/`testpassword123`).
+
+### MinIO attachment storage
+
+Task attachments are stored in MinIO (S3-compatible object storage). Configuration via environment variables:
+- `MINIO_ENDPOINT` (default: `localhost:9000`, devcontainer: `docker:9000`)
+- `MINIO_ACCESS_KEY` (default: `minioadmin`)
+- `MINIO_SECRET_KEY` (default: `minioadmin`)
+- `MINIO_BUCKET` (default: `ralph-tasks`)
+- `MINIO_SECURE` (default: `false`)
+
+Object keys follow the pattern `{project}/{NNN}/{filename}`. The storage module (`ralph_tasks/storage.py`) uses a lazy-singleton pattern matching `graph/client.py`.
+
+### MinIO tests: auto-skip when unavailable
+
+MinIO tests use `@pytest.mark.minio` marker and auto-skip when MinIO is unreachable. The test conftest tries `docker:9000` first (devcontainer DinD), then `localhost:9000`, then `localhost:19000` (test docker-compose). Override via `MINIO_TEST_ENDPOINT` env var. Test credentials: `MINIO_TEST_ACCESS_KEY`/`MINIO_TEST_SECRET_KEY` (defaults: `minioadmin`/`minioadmin`).
 
 ### `ralph review` inside nested Claude Code sessions
 
