@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+- **sandbox: Docker build from monorepo root instead of git+https** (#23)
+  - Replaced `git+https://github.com/...` package installation in devcontainer Dockerfile with local `COPY + pip install` from monorepo
+  - Changed Docker build context from `dockerfiles/` to monorepo root via `_find_monorepo_root()`
+  - Updated all COPY paths in Dockerfiles (devcontainer-base, tinyproxy, tinyproxy-registry, docker-dind) to use `sandbox/ralph_sandbox/dockerfiles/` prefix
+  - Added `_is_ralph_monorepo()` validation (checks `uv.lock` + `tasks/` + `sandbox/` dirs)
+  - Added `.dockerignore` at monorepo root to minimize build context
+  - Updated CLAUDE.md Docker section to reflect new approach
+  - New tests: `TestFindMonorepoRoot` (5 tests), `TestBuildImageSignature` (2 tests), `TestBuildCommandMonorepoRoot` (1 test)
+
 ### Removed
 - **ralph-cli: unused CLI parameters and config settings** (#32)
   - Removed `--max-budget` from `ralph implement` CLI and entire call chain (cli.py → implement.py → executor.py)

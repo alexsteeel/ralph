@@ -78,6 +78,13 @@ def build(
         console.print("Please ensure ai-sbx is properly installed or run from repository.")
         sys.exit(1)
 
+    # Find monorepo root (build context for COPY from tasks/, ralph-cli/)
+    monorepo_root = _find_monorepo_root()
+    if not monorepo_root:
+        console.print("[red]Could not find monorepo root (uv.lock marker).[/red]")
+        console.print("Please run from within the ralph monorepo.")
+        sys.exit(1)
+
     # Build images directly using Python
     images_to_build = BUILD_ORDER if all else BUILD_ORDER[:5]  # First 5 are required
 
@@ -115,7 +122,9 @@ def build(
             console.print(f"\n[cyan][{idx}/{total_images}] Building {image_name}...[/cyan]")
 
             # Build the image with visible output
-            success = _build_image(full_image_name, tag, full_path, no_cache=no_cache, verbose=True)
+            success = _build_image(
+                full_image_name, tag, full_path, monorepo_root, no_cache=no_cache, verbose=True
+            )
 
             if success:
                 console.print(
@@ -138,7 +147,12 @@ def build(
 
                 # Build the image silently
                 success = _build_image(
-                    full_image_name, tag, full_path, no_cache=no_cache, verbose=False
+                    full_image_name,
+                    tag,
+                    full_path,
+                    monorepo_root,
+                    no_cache=no_cache,
+                    verbose=False,
                 )
 
                 if success:
@@ -232,15 +246,55 @@ def _find_dockerfiles_dir() -> Path | None:
     return None
 
 
-def _build_image(
-    image_name: str, tag: str, build_path: Path, no_cache: bool = False, verbose: bool = False
-) -> bool:
-    """Build a Docker image."""
-    try:
-        # Build context is the dockerfiles directory itself
-        # This allows COPY commands to use relative paths like "common-settings/..."
-        build_context = build_path.parent
+def _is_ralph_monorepo(path: Path) -> bool:
+    """Verify this is the ralph monorepo, not just any uv project."""
+    return (path / "uv.lock").exists() and (path / "tasks").is_dir() and (path / "sandbox").is_dir()
 
+
+def _find_monorepo_root() -> Path | None:
+    """Find the monorepo root by looking for uv.lock + tasks/ + sandbox/ markers.
+
+    Walks up from the dockerfiles directory. Falls back to git rev-parse.
+    """
+    dockerfiles_dir = _find_dockerfiles_dir()
+    if dockerfiles_dir:
+        current = dockerfiles_dir
+        # Walk up at most 10 levels (safety bound; parent==current also breaks the loop)
+        for _ in range(10):
+            if _is_ralph_monorepo(current):
+                return current
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+
+    # Fallback: use git to find repo root
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        root = Path(result.stdout.strip())
+        if _is_ralph_monorepo(root):
+            return root
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    return None
+
+
+def _build_image(
+    image_name: str,
+    tag: str,
+    build_path: Path,
+    monorepo_root: Path,
+    no_cache: bool = False,
+    verbose: bool = False,
+) -> bool:
+    """Build a Docker image with monorepo root as build context."""
+    try:
         cmd = [
             "docker",
             "build",
@@ -248,7 +302,7 @@ def _build_image(
             f"{image_name}:{tag}",
             "-f",
             str(build_path / "Dockerfile"),
-            str(build_context),
+            str(monorepo_root),
         ]
 
         if no_cache:

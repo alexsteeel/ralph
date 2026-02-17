@@ -103,14 +103,19 @@ Direct access to Docker bridge IPs (172.17.x.x) is blocked by tinyproxy. Always 
 
 ### Docker
 
-Packages are installed in devcontainers from the monorepo via git URLs:
+Packages are installed in devcontainers via local COPY from the monorepo root (build context):
 
 ```dockerfile
-RUN uv pip install --system --break-system-packages --no-cache \
-    "ralph-tasks @ git+https://github.com/alexsteeel/ralph.git#subdirectory=tasks"
-RUN uv pip install --system --break-system-packages --no-cache \
-    "ralph-cli @ git+https://github.com/alexsteeel/ralph.git#subdirectory=ralph-cli"
+COPY tasks/ /tmp/ralph-tasks/
+RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-tasks/ \
+    && rm -rf /tmp/ralph-tasks/
+
+COPY ralph-cli/ /tmp/ralph-cli/
+RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-cli/ \
+    && rm -rf /tmp/ralph-cli/
 ```
+
+The `ai-sbx image build` command uses the monorepo root as Docker build context, found via `uv.lock` + `tasks/` + `sandbox/` markers.
 
 MCP server registration in `entrypoint.sh`:
 ```bash

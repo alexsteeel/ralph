@@ -111,14 +111,14 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN uv pip install --system --break-system-packages --no-cache ruff black
 
 # Install ralph-tasks (markdown-based task management MCP server)
-# https://github.com/alexsteeel/ralph/tree/main/tasks
-RUN uv pip install --system --break-system-packages --no-cache \
-    "ralph-tasks @ git+https://github.com/alexsteeel/ralph.git#subdirectory=tasks"
+COPY tasks/ /tmp/ralph-tasks/
+RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-tasks/ \
+    && rm -rf /tmp/ralph-tasks/
 
 # Install Ralph CLI (autonomous task execution with API recovery)
-# https://github.com/alexsteeel/ralph/tree/main/ralph-cli
-RUN uv pip install --system --break-system-packages --no-cache \
-    "ralph-cli @ git+https://github.com/alexsteeel/ralph.git#subdirectory=ralph-cli"
+COPY ralph-cli/ /tmp/ralph-cli/
+RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-cli/ \
+    && rm -rf /tmp/ralph-cli/
 
 # Install shfmt
 ENV SHFMT_VERSION=3.7.0
@@ -215,26 +215,26 @@ RUN npm install -g @playwright/test
 RUN /home/$USERNAME/.tmux/plugins/tpm/bin/install_plugins || true
 
 # Copy all scripts with proper permissions (including subdirectories)
-COPY --chown=$USERNAME:$USERNAME --chmod=755 devcontainer-base/scripts/*.sh /home/$USERNAME/scripts/
+COPY --chown=$USERNAME:$USERNAME --chmod=755 sandbox/ralph_sandbox/dockerfiles/devcontainer-base/scripts/*.sh /home/$USERNAME/scripts/
 
 # Copy claude defaults
-COPY --chown=$USERNAME:$USERNAME devcontainer-base/claude-defaults /home/$USERNAME/claude-defaults
+COPY --chown=$USERNAME:$USERNAME sandbox/ralph_sandbox/dockerfiles/devcontainer-base/claude-defaults /home/$USERNAME/claude-defaults
 
 # Copy configuration files
-COPY --chown=$USERNAME:$USERNAME devcontainer-base/conf/.zshrc /home/$USERNAME/.zshrc
-COPY --chown=$USERNAME:$USERNAME devcontainer-base/conf/.tmux.conf /home/$USERNAME/.tmux.conf
-COPY --chown=$USERNAME:$USERNAME devcontainer-base/conf/.vimrc /home/$USERNAME/.vimrc
-COPY --chown=$USERNAME:$USERNAME devcontainer-base/conf/codex_config.toml /home/$USERNAME/.codex/config.toml
+COPY --chown=$USERNAME:$USERNAME sandbox/ralph_sandbox/dockerfiles/devcontainer-base/conf/.zshrc /home/$USERNAME/.zshrc
+COPY --chown=$USERNAME:$USERNAME sandbox/ralph_sandbox/dockerfiles/devcontainer-base/conf/.tmux.conf /home/$USERNAME/.tmux.conf
+COPY --chown=$USERNAME:$USERNAME sandbox/ralph_sandbox/dockerfiles/devcontainer-base/conf/.vimrc /home/$USERNAME/.vimrc
+COPY --chown=$USERNAME:$USERNAME sandbox/ralph_sandbox/dockerfiles/devcontainer-base/conf/codex_config.toml /home/$USERNAME/.codex/config.toml
 
 # Create logs directory for devcontainer scripts (non-root-post-create.sh, tests)
 RUN mkdir -p /home/$USERNAME/scripts/logs && \
     chown -R $USERNAME:$USERNAME /home/$USERNAME/scripts/logs
 
 # Copy default whitelist from common_settings
-COPY common-settings/default-whitelist.txt /usr/local/etc/default-whitelist.txt
+COPY sandbox/ralph_sandbox/dockerfiles/common-settings/default-whitelist.txt /usr/local/etc/default-whitelist.txt
 
 # Copy entrypoint script
-COPY --chown=claude:local-ai-team devcontainer-base/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=claude:local-ai-team sandbox/ralph_sandbox/dockerfiles/devcontainer-base/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
