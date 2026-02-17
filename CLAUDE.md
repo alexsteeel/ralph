@@ -119,10 +119,31 @@ RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-cli/ \
 
 The `ai-sbx image build` command uses the monorepo root as Docker build context, found via `uv.lock` + `tasks/` + `sandbox/` markers.
 
-MCP server registration in `entrypoint.sh`:
+### ralph-tasks container
+
+The ralph-tasks MCP server runs as a shared Docker container (`ai-sbx-ralph-tasks`) serving both the Kanban web UI and MCP endpoint on port 8000:
+
+- `http://ai-sbx-ralph-tasks:8000/` — Kanban web UI (FastAPI)
+- `http://ai-sbx-ralph-tasks:8000/mcp` — MCP endpoint (streamable-http)
+- `http://ai-sbx-ralph-tasks:8000/health` — Docker HEALTHCHECK
+
+Build: `docker build -f tasks/Dockerfile .` (from monorepo root).
+
+MCP server registration in `entrypoint.sh` (with health check fallback):
 ```bash
-claude mcp add -s user ralph-tasks -- ralph-tasks serve
+# Prefer streamable-http if container is running, fallback to local stdio
+if curl -sf --max-time 3 "http://ai-sbx-ralph-tasks:8000/health" >/dev/null 2>&1; then
+    claude mcp add -s user --transport http ralph-tasks "http://ai-sbx-ralph-tasks:8000/mcp"
+else
+    claude mcp add -s user ralph-tasks -- ralph-tasks serve
+fi
 ```
+
+Environment variables for ralph-tasks container:
+- `NEO4J_URI` — Neo4j Bolt URI (default: `bolt://ai-sbx-neo4j:7687`)
+- `NEO4J_USER` / `NEO4J_PASSWORD` — Neo4j credentials
+- `MINIO_ENDPOINT` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` — MinIO credentials
+- `RALPH_TASKS_HOST` / `RALPH_TASKS_PORT` — bind address (default: `127.0.0.1:8000`)
 
 ## Development Notes
 

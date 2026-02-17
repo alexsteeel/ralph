@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 from fastmcp import FastMCP
+from starlette.applications import Starlette
 
 from .core import (
     copy_attachment,
@@ -307,8 +308,17 @@ def delete_attachment(project: str, number: int, filename: str) -> dict:
     return {"ok": True}
 
 
+def get_mcp_http_app() -> Starlette:
+    """Return an ASGI app for the MCP server using streamable-http transport.
+
+    Intended to be mounted into the FastAPI web app at /mcp.
+    Uses path="/" so the endpoint is at the mount point itself.
+    """
+    return mcp.http_app(path="/", transport="streamable-http")
+
+
 def main():
-    """Run the MCP server."""
+    """Run the MCP server (stdio transport for local Claude Code)."""
     mcp.run()
 
 

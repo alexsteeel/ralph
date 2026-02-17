@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- **tasks: containerize ralph-tasks MCP server** (#33)
+  - Combined ASGI app: FastAPI web UI + FastMCP streamable-http on single port 8000
+  - `get_mcp_http_app()` in `mcp.py` — returns Starlette app mounted at `/mcp`
+  - `/health` endpoint for Docker HEALTHCHECK
+  - `main()` reads `RALPH_TASKS_HOST`/`RALPH_TASKS_PORT` from environment
+  - New `tasks/Dockerfile`: python:3.12-slim, non-root user, uv install
+  - `ralph-tasks` service in docker-compose (`ai-sbx-ralph-tasks`, port 8000)
+  - Entrypoint MCP registration: streamable-http with health check, stdio fallback
+  - Container tracking in `init.py`
+  - New tests: `test_web_mcp_mount.py` (11 tests)
 - **tasks: MinIO S3 attachment storage** (#35)
   - New `ralph_tasks/storage.py` — S3 storage module with lazy-singleton MinIO client
   - Object keys: `{project}/{NNN}/{filename}` with input sanitization (`_sanitize_key_component`)

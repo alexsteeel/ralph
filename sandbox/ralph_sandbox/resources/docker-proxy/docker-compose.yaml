@@ -71,6 +71,27 @@ services:
     networks:
       - ai-sbx-proxy-internal
 
+  # Ralph Tasks — combined MCP server + web UI
+  ralph-tasks:
+    image: ai-agents-sandbox/ralph-tasks:latest
+    container_name: ai-sbx-ralph-tasks
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      NEO4J_URI: "bolt://ai-sbx-neo4j:7687"
+      NEO4J_USER: "neo4j"
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD:-neo4j-ai-sbx-password}"
+      MINIO_ENDPOINT: "ai-sbx-minio:9000"
+      MINIO_ACCESS_KEY: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+      RALPH_TASKS_HOST: "0.0.0.0"
+    networks:
+      - ai-sbx-proxy-internal
+    depends_on:
+      - neo4j
+      - minio
+
   # Neo4j graph database for task management
   neo4j:
     image: neo4j:2025

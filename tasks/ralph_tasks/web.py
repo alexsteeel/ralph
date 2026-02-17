@@ -1,6 +1,7 @@
 """Web UI for task management (kanban board + project overview)."""
 
 import io
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -33,6 +34,7 @@ from .core import (
 from .core import (
     update_task as _update_task,
 )
+from .mcp import get_mcp_http_app
 
 
 def find_templates_dir() -> Path:
@@ -59,6 +61,15 @@ def find_templates_dir() -> Path:
 
 app = FastAPI(title="Task Cloud")
 templates = Jinja2Templates(directory=find_templates_dir())
+
+# Mount MCP server under /mcp for streamable-http access
+app.mount("/mcp", get_mcp_http_app(), name="mcp")
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint for Docker HEALTHCHECK."""
+    return {"status": "ok", "service": "ralph-tasks"}
 
 
 class TaskUpdate(BaseModel):
@@ -331,7 +342,9 @@ async def get_settings():
 
 def main():
     """Run the web server."""
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    host = os.environ.get("RALPH_TASKS_HOST", "127.0.0.1")
+    port = int(os.environ.get("RALPH_TASKS_PORT", "8000"))
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":
