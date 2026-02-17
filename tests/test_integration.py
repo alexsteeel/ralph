@@ -26,17 +26,13 @@ class TestDockerfile:
 
     def test_installs_ralph_tasks_from_monorepo(self):
         content = self.DOCKERFILE.read_text()
-        assert (
-            "ralph-tasks @ git+https://github.com/alexsteeel/ralph.git#subdirectory=tasks"
-            in content
-        )
+        assert "COPY tasks/ /tmp/ralph-tasks/" in content
+        assert "uv pip install" in content and "/tmp/ralph-tasks/" in content
 
     def test_installs_ralph_cli_from_monorepo(self):
         content = self.DOCKERFILE.read_text()
-        assert (
-            "ralph-cli @ git+https://github.com/alexsteeel/ralph.git#subdirectory=ralph-cli"
-            in content
-        )
+        assert "COPY ralph-cli/ /tmp/ralph-cli/" in content
+        assert "uv pip install" in content and "/tmp/ralph-cli/" in content
 
     def test_no_old_md_task_mcp_url(self):
         content = self.DOCKERFILE.read_text()
@@ -235,4 +231,4 @@ class TestDocumentation:
     def test_claude_md_has_docker_instructions(self):
         content = (ROOT / "CLAUDE.md").read_text()
         assert "Docker" in content
-        assert "ralph-tasks @ git+" in content
+        assert "COPY tasks/" in content
