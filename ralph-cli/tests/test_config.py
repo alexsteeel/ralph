@@ -72,10 +72,8 @@ CONTEXT_OVERFLOW_MAX_RETRIES=3
         settings = Settings(
             _env_file=None,
             log_dir=temp_dir / "logs",
-            cli_dir=temp_dir / "cli",
         )
         assert settings.log_dir == temp_dir / "logs"
-        assert settings.cli_dir == temp_dir / "cli"
 
     def test_from_env_vars(self, monkeypatch):
         """Test loading from environment variables."""

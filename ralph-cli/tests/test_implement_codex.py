@@ -20,7 +20,6 @@ def settings():
     return Settings(
         _env_file=None,
         codex_review_max_iterations=3,
-        codex_review_fix_timeout=90,
         codex_review_model="gpt-5.3-codex",
     )
 
@@ -423,18 +422,15 @@ class TestConfigCodexSettings:
     def test_defaults(self):
         settings = Settings(_env_file=None)
         assert settings.codex_review_max_iterations == 3
-        assert settings.codex_review_fix_timeout == 900
         assert settings.codex_review_model == "gpt-5.3-codex"
 
     def test_custom_values(self):
         settings = Settings(
             _env_file=None,
             codex_review_max_iterations=5,
-            codex_review_fix_timeout=600,
             codex_review_model="gpt-4o",
         )
         assert settings.codex_review_max_iterations == 5
-        assert settings.codex_review_fix_timeout == 600
         assert settings.codex_review_model == "gpt-4o"
 
     def test_from_env_vars(self, monkeypatch):

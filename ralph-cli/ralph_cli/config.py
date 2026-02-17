@@ -30,12 +30,10 @@ class Settings(BaseSettings):
 
     # Codex review loop settings
     codex_review_max_iterations: int = 3
-    codex_review_fix_timeout: int = 900  # 15 min per claude fix
     codex_review_model: str = "gpt-5.3-codex"
 
     # Paths
     log_dir: Path = Field(default=Path.home() / ".claude/logs")
-    cli_dir: Path = Field(default=Path.home() / ".claude/cli")
 
     @property
     def telegram_configured(self) -> bool:

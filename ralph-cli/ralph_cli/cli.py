@@ -88,10 +88,6 @@ def implement(
         ),
     ],
     working_dir: Path | None = typer.Option(None, "-w", "--working-dir", help="Working directory"),
-    max_budget: float | None = typer.Option(
-        None, "--max-budget", help="Maximum budget in USD per task"
-    ),
-    no_recovery: bool = typer.Option(False, "--no-recovery", help="Disable automatic recovery"),
     prompt: str | None = typer.Option(
         None, "--prompt", help="Additional prompt appended to each task"
     ),
@@ -99,7 +95,7 @@ def implement(
     """Autonomous implementation with recovery and notifications."""
     from .commands.implement import run_implement
 
-    raise typer.Exit(run_implement(project, tasks, working_dir, max_budget, no_recovery, prompt))
+    raise typer.Exit(run_implement(project, tasks, working_dir, extra_prompt=prompt))
 
 
 @app.command()

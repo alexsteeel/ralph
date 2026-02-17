@@ -58,8 +58,6 @@ def run_implement(
     project: str,
     task_args: list[str],
     working_dir: Path | None = None,
-    max_budget: float | None = None,
-    no_recovery: bool = False,
     extra_prompt: str | None = None,
 ) -> int:
     """Run autonomous implementation for tasks."""
@@ -74,13 +72,6 @@ def run_implement(
     if working_dir is None:
         working_dir = Path.cwd()
 
-    # Override recovery if disabled
-    if no_recovery:
-        settings = Settings(
-            **settings.model_dump(),
-            recovery_enabled=False,
-        )
-
     notifier = Notifier()
 
     # Setup logging
@@ -94,15 +85,12 @@ def run_implement(
         Project=project,
         Tasks=", ".join(str(t) for t in tasks),
         WorkingDir=str(working_dir),
-        MaxBudget=str(max_budget) if max_budget else "unlimited",
-        Recovery="disabled" if no_recovery else "enabled",
         Prompt=extra_prompt or "(none)",
     )
 
     console.rule(f"[bold blue]Ralph Implementation: {project}[/bold blue]")
     console.print(f"Tasks: [green]{', '.join(str(t) for t in tasks)}[/green]")
     console.print(f"Working directory: [green]{working_dir}[/green]")
-    console.print(f"Recovery: [green]{'disabled' if no_recovery else 'enabled'}[/green]")
 
     # Notify session start
     notifier.session_start(project, tasks)
@@ -136,7 +124,6 @@ def run_implement(
             log_dir=log_dir,
             settings=settings,
             notifier=notifier,
-            max_budget=max_budget,
             session_log=session_log,
             extra_prompt=extra_prompt,
         )
@@ -242,7 +229,6 @@ def execute_task_with_recovery(
     log_dir: Path,
     settings: Settings,
     notifier: Notifier,
-    max_budget: float | None,
     session_log: SessionLog,
     extra_prompt: str | None = None,
 ) -> TaskResult:
@@ -270,7 +256,6 @@ def execute_task_with_recovery(
             prompt=prompt,
             working_dir=working_dir,
             log_path=log_path,
-            max_budget=max_budget,
             resume_session=resume_session,
         )
 

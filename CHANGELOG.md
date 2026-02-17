@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Removed
+- **ralph-cli: unused CLI parameters and config settings** (#32)
+  - Removed `--max-budget` from `ralph implement` CLI and entire call chain (cli.py → implement.py → executor.py)
+  - Removed `--no-recovery` from `ralph implement` CLI and implement.py (recovery can still be disabled via `RECOVERY_ENABLED=false` in `.env`)
+  - Removed `cli_dir` from Settings (unused path)
+  - Removed `codex_review_fix_timeout` from Settings (unused timeout)
+  - Updated tests: `test_config.py`, `test_implement_codex.py`
 - **sandbox: C#/.NET and Go dockerfiles removed** (#20)
   - Deleted `devcontainer-dotnet/` (C#/.NET SDK Dockerfile) and `devcontainer-golang/` (Go toolchain Dockerfile)
   - Removed `DOTNET`, `GOLANG` from `BaseImage` enum — only `BASE` remains

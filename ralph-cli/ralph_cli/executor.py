@@ -92,7 +92,6 @@ def run_claude(
     working_dir: Path,
     log_path: Path,
     model: str = "opus",
-    max_budget: float | None = None,
     resume_session: str | None = None,
     output: TextIO = sys.stdout,
 ) -> TaskResult:
@@ -103,7 +102,6 @@ def run_claude(
         working_dir: Working directory for Claude
         log_path: Path to write log file
         model: Model to use (opus, sonnet, haiku)
-        max_budget: Maximum budget in USD
         resume_session: Session ID to resume
         output: Stream for formatted output
 
@@ -122,9 +120,6 @@ def run_claude(
         "--verbose",
         "--dangerously-skip-permissions",
     ]
-
-    if max_budget:
-        cmd.extend(["--max-budget", str(max_budget)])
 
     if resume_session:
         cmd.extend(["--resume", resume_session])
