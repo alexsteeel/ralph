@@ -39,12 +39,7 @@ def generate_unique_subnet(project_name: str) -> tuple[str, str]:
 
 def get_docker_image_name(base_image: BaseImage) -> str:
     """Map base image type to actual Docker image name."""
-    mapping = {
-        BaseImage.BASE: "devcontainer",
-        BaseImage.DOTNET: "devcontainer-dotnet",
-        BaseImage.GOLANG: "devcontainer-golang",
-    }
-    return mapping.get(base_image, "devcontainer")
+    return "devcontainer"
 
 
 class TemplateManager:

@@ -71,7 +71,7 @@ class TestTemplateManager:
                 name="test-project",
                 path=Path(temp_dir),
                 preferred_ide=IDE.PYCHARM,
-                base_image=BaseImage.DOTNET,
+                base_image=BaseImage.BASE,
             )
 
             manager = TemplateManager()
@@ -98,7 +98,7 @@ class TestTemplateManager:
             assert "COMPOSE_PROJECT_NAME=" in env_content
 
             dockerfile_content = (output_dir / "Dockerfile").read_text()
-            assert "FROM ai-agents-sandbox/devcontainer-dotnet:1.0.0" in dockerfile_content
+            assert "FROM ai-agents-sandbox/devcontainer:1.0.0" in dockerfile_content
 
     def test_force_overwrite(self):
         """Test force overwrite existing files."""

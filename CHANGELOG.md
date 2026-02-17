@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Removed
+- **sandbox: C#/.NET and Go dockerfiles removed** (#20)
+  - Deleted `devcontainer-dotnet/` (C#/.NET SDK Dockerfile) and `devcontainer-golang/` (Go toolchain Dockerfile)
+  - Removed `DOTNET`, `GOLANG` from `BaseImage` enum — only `BASE` remains
+  - Simplified `get_docker_image_name()`, `_get_environment_image_spec()` — direct returns instead of mappings
+  - Removed dotnet/golang from wizard choices, CLI options, build order, image lists
+  - Removed `OPTIONAL_IMAGES` list (was empty after cleanup)
+  - Removed redundant `None`-checks and dead code paths across docker.py, init.py, cli.py
+
 ### Changed
 - **core.py rewritten: file storage → Neo4j graph database** (#10)
   - All task/project CRUD operations now use Neo4j via `graph/crud.py`

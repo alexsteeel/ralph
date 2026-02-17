@@ -9,6 +9,7 @@ from rich.text import Text
 
 from ralph_sandbox import __version__
 from ralph_sandbox.commands import image, notify, worktree
+from ralph_sandbox.config import BaseImage
 from ralph_sandbox.utils import AliasedGroup, logger
 
 console = Console()
@@ -125,7 +126,7 @@ def init_global(ctx: click.Context, wizard: bool, force: bool) -> None:
 @click.option("--wizard", is_flag=True, help="Run interactive setup wizard")
 @click.option(
     "--base-image",
-    type=click.Choice(["base", "dotnet", "golang"]),
+    type=click.Choice([v.value for v in BaseImage]),
     help="Development environment to use",
 )
 @click.option(
@@ -152,18 +153,11 @@ def init_project(
     from pathlib import Path
 
     from ralph_sandbox.commands.init import init_project as init_project_impl
-    from ralph_sandbox.config import IDE, BaseImage
 
     console = ctx.obj["console"]
     verbose = ctx.obj.get("verbose", False)
 
     project_path = Path(path).resolve()
-
-    # Convert string values to enums (used for validation)
-    if base_image:
-        BaseImage(base_image)
-    if ide:
-        IDE(ide)
 
     init_project_impl(
         console,

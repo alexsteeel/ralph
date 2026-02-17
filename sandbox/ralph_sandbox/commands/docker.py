@@ -32,7 +32,7 @@ def docker() -> None:
 @click.option(
     "--environment",
     type=click.Choice([v.value for v in BaseImage]),
-    help="Development environment to build (base, dotnet, golang)",
+    help="Development environment to build",
 )
 @click.option("--all", is_flag=True, help="Build all image environments including support images")
 @click.option("--no-cache", is_flag=True, help="Build without using cache")
@@ -60,9 +60,6 @@ def build(
 
         # Build base devcontainer image
         ai-sbx docker build
-
-        # Build specific environment
-        ai-sbx docker build --environment devcontainer-dotnet
 
         # Build all images including support
         ai-sbx docker build --all
@@ -115,7 +112,6 @@ def build(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-
         # Build order: supporting images first, then base, then environments
         images_to_build = []
 
@@ -136,10 +132,7 @@ def build(
 
         # Add environment images
         for environment in environments_to_build:
-            spec = _get_environment_image_spec(environment)
-            if spec:
-                name, dockerfile_dir, image_repo = spec
-                images_to_build.append((name, dockerfile_dir, image_repo))
+            images_to_build.append(_get_environment_image_spec(environment))
 
         # Build all images
         for name, dockerfile_dir, image_repo in images_to_build:
@@ -513,7 +506,6 @@ def clean(ctx: click.Context) -> None:
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-
         # Remove stopped containers
         task = progress.add_task("Removing stopped containers...", total=None)
         try:
@@ -579,9 +571,7 @@ def _image_exists(image_name: str, tag: str) -> bool:
         return False
 
 
-def _verify_images(
-    console: Console, environment: str | None, all_images: bool, tag: str
-) -> None:
+def _verify_images(console: Console, environment: str | None, all_images: bool, tag: str) -> None:
     """Verify that Docker images exist."""
     console.print("\n[bold cyan]Verifying Docker images[/bold cyan]\n")
 
@@ -601,22 +591,14 @@ def _verify_images(
     # Add environment images
     if all_images:
         for v in BaseImage:
-            spec = _get_environment_image_spec(v)
-            if spec:
-                name, _, image_repo = spec
-                images_to_check.append((name, image_repo))
+            name, _, image_repo = _get_environment_image_spec(v)
+            images_to_check.append((name, image_repo))
     elif environment:
-        v = BaseImage(environment)
-        spec = _get_environment_image_spec(v)
-        if spec:
-            name, _, image_repo = spec
-            images_to_check.append((name, image_repo))
+        name, _, image_repo = _get_environment_image_spec(BaseImage(environment))
+        images_to_check.append((name, image_repo))
     else:
-        # Default to base
-        spec = _get_environment_image_spec(BaseImage.BASE)
-        if spec:
-            name, _, image_repo = spec
-            images_to_check.append((name, image_repo))
+        name, _, image_repo = _get_environment_image_spec(BaseImage.BASE)
+        images_to_check.append((name, image_repo))
 
     # Check each image
     missing = []
@@ -721,10 +703,7 @@ def _push_images(environments: list[BaseImage], tag: str, console: Console, verb
     """Push images to registry."""
     for environment in environments:
         # Use mapping for image repo
-        spec = _get_environment_image_spec(environment)
-        if spec is None:
-            continue
-        _, _, image_repo = spec
+        _, _, image_repo = _get_environment_image_spec(environment)
         image_name = f"{image_repo}:{tag}"
 
         try:
@@ -735,26 +714,10 @@ def _push_images(environments: list[BaseImage], tag: str, console: Console, verb
             console.print(f"[red]Failed to push {image_name}: {e}[/red]")
 
 
-def _get_environment_image_spec(environment: BaseImage) -> tuple[str, str, str] | None:
-    """Map environment to (name, dockerfile_dir, image_repo).
-
-    Returns None if environment is not supported by this repository layout.
-    """
-    mapping = {
-        BaseImage.BASE: (
-            "devcontainer-base",
-            "images/devcontainer-base",
-            "ai-agents-sandbox/devcontainer",
-        ),
-        BaseImage.DOTNET: (
-            "devcontainer-dotnet",
-            "images/devcontainer-dotnet",
-            "ai-agents-sandbox/devcontainer-dotnet",
-        ),
-        BaseImage.GOLANG: (
-            "devcontainer-golang",
-            "images/devcontainer-golang",
-            "ai-agents-sandbox/devcontainer-golang",
-        ),
-    }
-    return mapping.get(environment)
+def _get_environment_image_spec(environment: BaseImage) -> tuple[str, str, str]:
+    """Return (name, dockerfile_dir, image_repo) for the base environment."""
+    return (
+        "devcontainer-base",
+        "images/devcontainer-base",
+        "ai-agents-sandbox/devcontainer",
+    )

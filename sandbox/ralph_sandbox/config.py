@@ -24,11 +24,6 @@ class BaseImage(str, Enum):
     """Available base Docker images for development."""
 
     BASE = "base"  # General-purpose development environment
-    DOTNET = "dotnet"  # Base + .NET SDK
-    GOLANG = "golang"  # Base + Go toolchain
-    # Future additions
-    # RUST = "devcontainer-rust"
-    # JAVA = "devcontainer-java"
 
 
 class ProxyConfig(BaseModel):
@@ -198,10 +193,7 @@ def save_project_config(config: ProjectConfig) -> None:
 def get_default_whitelist_domains() -> list[str]:
     """Get the default whitelist domains from the shared whitelist file."""
     whitelist_file = (
-        Path(__file__).parent
-        / "dockerfiles"
-        / "common-settings"
-        / "default-whitelist.txt"
+        Path(__file__).parent / "dockerfiles" / "common-settings" / "default-whitelist.txt"
     )
 
     if not whitelist_file.exists():

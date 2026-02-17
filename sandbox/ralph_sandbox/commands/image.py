@@ -19,11 +19,6 @@ REQUIRED_IMAGES = [
     "ai-agents-sandbox/devcontainer",
 ]
 
-OPTIONAL_IMAGES = [
-    "ai-agents-sandbox/devcontainer-dotnet",
-    "ai-agents-sandbox/devcontainer-golang",
-]
-
 # Image build order and directory mapping (relative to images dir)
 BUILD_ORDER = [
     ("tinyproxy-base", "tinyproxy-base"),
@@ -31,8 +26,6 @@ BUILD_ORDER = [
     ("tinyproxy-registry", "tinyproxy-registry"),
     ("docker-dind", "docker-dind"),
     ("devcontainer", "devcontainer-base"),
-    ("devcontainer-dotnet", "devcontainer-dotnet"),
-    ("devcontainer-golang", "devcontainer-golang"),
 ]
 
 
@@ -176,13 +169,8 @@ def list_images(ctx: click.Context) -> None:
     table.add_column("Image", style="cyan")
     table.add_column("Tag", style="magenta")
     table.add_column("Status", style="green")
-    table.add_column("Required", style="yellow")
 
-    all_images = REQUIRED_IMAGES + OPTIONAL_IMAGES
-
-    for image_name in all_images:
-        is_required = image_name in REQUIRED_IMAGES
-
+    for image_name in REQUIRED_IMAGES:
         # Check for 1.0.0 tag
         if _image_exists(image_name, "1.0.0"):
             status = "✓ Installed"
@@ -195,7 +183,6 @@ def list_images(ctx: click.Context) -> None:
             image_name.replace("ai-agents-sandbox/", ""),
             "1.0.0",
             f"[{style}]{status}[/{style}]",
-            "Yes" if is_required else "No",
         )
 
     console.print(table)

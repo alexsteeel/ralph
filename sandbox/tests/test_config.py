@@ -44,7 +44,7 @@ class TestGlobalConfig:
             # Create and save config
             config = GlobalConfig(
                 default_ide=IDE.PYCHARM,
-                default_base_image=BaseImage.DOTNET,
+                default_base_image=BaseImage.BASE,
             )
             config.save(config_path)
 
@@ -52,7 +52,7 @@ class TestGlobalConfig:
             loaded = GlobalConfig.load(config_path)
 
             assert loaded.default_ide == IDE.PYCHARM
-            assert loaded.default_base_image == BaseImage.DOTNET
+            assert loaded.default_base_image == BaseImage.BASE
             assert loaded.group_gid == 3000
 
         finally:
@@ -68,13 +68,13 @@ class TestProjectConfig:
             name="test-project",
             path=Path("/test/project"),
             preferred_ide=IDE.VSCODE,
-            base_image=BaseImage.GOLANG,
+            base_image=BaseImage.BASE,
         )
 
         assert config.name == "test-project"
         assert config.path == Path("/test/project")
         assert config.preferred_ide == IDE.VSCODE
-        assert config.base_image == BaseImage.GOLANG
+        assert config.base_image == BaseImage.BASE
 
     def test_path_validation(self):
         """Test path is made absolute."""
@@ -140,7 +140,7 @@ class TestProjectConfigIO:
                 name="test-project",
                 path=project_dir,
                 preferred_ide=IDE.PYCHARM,
-                base_image=BaseImage.DOTNET,
+                base_image=BaseImage.BASE,
                 proxy=ProxyConfig(
                     upstream="socks5://localhost:1080",
                     whitelist_domains=["api.example.com"],
@@ -156,7 +156,7 @@ class TestProjectConfigIO:
             assert loaded is not None
             assert loaded.name == "test-project"
             assert loaded.preferred_ide == IDE.PYCHARM
-            assert loaded.base_image == BaseImage.DOTNET
+            assert loaded.base_image == BaseImage.BASE
             assert loaded.proxy.upstream == "socks5://localhost:1080"
             assert "api.example.com" in loaded.proxy.whitelist_domains
 
@@ -219,9 +219,7 @@ class TestEnums:
     def test_base_image_enum(self):
         """Test BaseImage enum values."""
         assert BaseImage.BASE.value == "base"
-        assert BaseImage.GOLANG.value == "golang"
-        assert BaseImage.DOTNET.value == "dotnet"
+        assert len(BaseImage) == 1
 
         # Test from string
         assert BaseImage("base") == BaseImage.BASE
-        assert BaseImage("golang") == BaseImage.GOLANG

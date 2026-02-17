@@ -56,7 +56,7 @@ def init_global_cmd(ctx: click.Context, wizard: bool, force: bool) -> None:
 @click.option(
     "--base-image",
     type=click.Choice([v.value for v in BaseImage]),
-    help="Development environment to use (base, dotnet, golang)",
+    help="Development environment to use",
 )
 @click.option("--ide", type=click.Choice([i.value for i in IDE]), help="Preferred IDE")
 @click.option("--force", is_flag=True, help="Overwrite existing configuration")
@@ -166,12 +166,6 @@ def init_global(
                 choices=[(i.value.upper(), i.value) for i in IDE],
                 default=config.default_ide.value,
             ),
-            inquirer.List(
-                "default_base_image",
-                message="Select default base image",
-                choices=[(v.value.capitalize(), v.value) for v in BaseImage],
-                default=config.default_base_image.value,
-            ),
             inquirer.Text(
                 "group_name",
                 message="Group name for file sharing",
@@ -188,7 +182,6 @@ def init_global(
         answers = inquirer.prompt(questions)
         if answers:
             config.default_ide = IDE(answers["default_ide"])
-            config.default_base_image = BaseImage(answers["default_base_image"])
             config.group_name = answers["group_name"]
             config.group_gid = int(answers["group_gid"])
 
@@ -740,10 +733,7 @@ def init_project(
         console.print("[dim]Choose the base image that matches your technology stack[/dim]")
 
         # Determine default selection based on existing config
-        default_base_image = (
-            config.base_image.value if config.base_image.value != "custom" else "base"
-        )
-        # If reconfiguring and has custom Docker image, default to "custom_image"
+        default_base_image = "base"
         if existing_config and "CUSTOM_DOCKER_IMAGE" in existing_config.environment:
             default_base_image = "custom_image"
 
@@ -753,8 +743,6 @@ def init_project(
                 message="Select base image",
                 choices=[
                     ("Base (Python, Node.js, general-purpose)", "base"),
-                    (".NET (Base + C#/.NET SDK)", "dotnet"),
-                    ("Go (Base + Go compiler)", "golang"),
                     ("Custom (create your own Dockerfile)", "custom"),
                     ("Custom Docker Image (use existing image:tag)", "custom_image"),
                 ],
@@ -799,34 +787,18 @@ def init_project(
             custom_docker_image = image_answers["custom_image"]
             # Store the custom image in config environment
             config.environment["CUSTOM_DOCKER_IMAGE"] = custom_docker_image
-            # Set base_image to base as a fallback
-            config.base_image = BaseImage("base")
+            config.base_image = BaseImage.BASE
             console.print(f"[green]✓ Will use custom image: {custom_docker_image}[/green]")
 
         elif env_answers["base_image"] == "custom":
             # User selected custom, so they definitely want a Dockerfile
             custom_dockerfile = True
-            console.print("\n[dim]A custom Dockerfile will be created for you to modify[/dim]")
-
-            # Only ask which base image to extend from
-            custom_questions = [
-                inquirer.List(
-                    "custom_base",
-                    message="Which base image to extend from?",
-                    choices=[
-                        ("Base (Python, Node.js, general-purpose)", "base"),
-                        (".NET (Base + C#/.NET SDK)", "dotnet"),
-                        ("Go (Base + Go compiler)", "golang"),
-                    ],
-                    default="base",
-                ),
-            ]
-
-            custom_answers = inquirer.prompt(custom_questions)
-            if custom_answers:
-                config.base_image = BaseImage(custom_answers["custom_base"])
+            config.base_image = BaseImage.BASE
+            console.print(
+                "\n[dim]A custom Dockerfile will be created extending the base image[/dim]"
+            )
         else:
-            config.base_image = BaseImage(env_answers["base_image"])
+            config.base_image = BaseImage.BASE
 
         # Step 2.4: Ask about custom Docker-in-Docker image
         console.print("\n[bold]Step 2.4: Docker-in-Docker Configuration[/bold]")
@@ -857,8 +829,9 @@ def init_project(
                     "custom_dind",
                     message="Docker-in-Docker image:tag",
                     default=default_custom_dind or "docker:dind",
-                    validate=lambda _, x: ":" in x
-                    or "Image must include a tag (e.g., docker:dind)",
+                    validate=lambda _, x: (
+                        ":" in x or "Image must include a tag (e.g., docker:dind)"
+                    ),
                 ),
             ]
 
@@ -896,7 +869,9 @@ def init_project(
             has_plugins = plugins_dir.exists() and any(plugins_dir.iterdir())
             has_settings = settings_file.exists()
 
-            has_claude_settings = has_agents or has_commands or has_hooks or has_plugins or has_settings
+            has_claude_settings = (
+                has_agents or has_commands or has_hooks or has_plugins or has_settings
+            )
 
             if has_claude_settings:
                 console.print("[green]✓ Found Claude settings on your host system[/green]")
@@ -1015,10 +990,12 @@ def init_project(
                 "upstream",
                 message="Upstream proxy URL (e.g., socks5://host.gateway:8888, http://host.gateway:3128, or empty)",
                 default=config.proxy.upstream or "",
-                validate=lambda _, x: x == ""
-                or x.startswith("http://")
-                or x.startswith("socks5://")
-                or "Must start with http:// or socks5://",
+                validate=lambda _, x: (
+                    x == ""
+                    or x.startswith("http://")
+                    or x.startswith("socks5://")
+                    or "Must start with http:// or socks5://"
+                ),
             ),
         ]
 
