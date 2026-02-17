@@ -10,7 +10,7 @@ ralph/
 ├── uv.lock                     # Shared lock file
 ├── conftest.py                 # Root pytest discovery
 ├── tasks/                      # ralph-tasks package
-│   ├── ralph_tasks/            # MCP server, CLI, web UI
+│   ├── ralph_tasks/            # MCP server, web UI
 │   ├── templates/              # Jinja2 templates
 │   └── tests/
 ├── sandbox/                    # ralph-sandbox package
@@ -31,7 +31,7 @@ ralph/
 
 | Package | Directory | CLI Commands | Description |
 |---------|-----------|--------------|-------------|
-| `ralph-tasks` | `tasks/` | `tm`, `tm-web`, `ralph-tasks serve` | Markdown task management + MCP server |
+| `ralph-tasks` | `tasks/` | `ralph-tasks serve`, `ralph-tasks-web` | Markdown task management + MCP server |
 | `ralph-sandbox` | `sandbox/` | `ai-sbx` | Devcontainer management for AI agents |
 | `ralph-cli` | `ralph-cli/` | `ralph` | Autonomous task execution with API recovery |
 
@@ -49,7 +49,7 @@ No `src/` directory: `tasks/ralph_tasks/`, `sandbox/ralph_sandbox/`, `ralph-cli/
 
 | Package Import | CLI Command |
 |---------------|-------------|
-| `ralph_tasks` | `tm`, `tm-web` |
+| `ralph_tasks` | `ralph-tasks-web` |
 | `ralph_sandbox` | `ai-sbx` |
 | `ralph_cli` | `ralph` |
 

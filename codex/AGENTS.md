@@ -6,7 +6,7 @@ uv workspace monorepo with 3 Python packages (flat layout, no `src/`):
 
 | Directory | Package | Import | CLI |
 |-----------|---------|--------|-----|
-| `tasks/` | `ralph-tasks` | `from ralph_tasks.core import ...` | `tm`, `tm-web` |
+| `tasks/` | `ralph-tasks` | `from ralph_tasks.core import ...` | `ralph-tasks-web` |
 | `sandbox/` | `ralph-sandbox` | `from ralph_sandbox.cli import ...` | `ai-sbx` |
 | `ralph-cli/` | `ralph-cli` | `from ralph_cli.cli import ...` | `ralph` |
 

@@ -1752,6 +1752,7 @@ source = { editable = "ralph-cli" }
 dependencies = [
     { name = "gitpython" },
     { name = "pydantic-settings" },
+    { name = "ralph-tasks" },
     { name = "rich" },
     { name = "typer" },
 ]
@@ -1760,6 +1761,7 @@ dependencies = [
 requires-dist = [
     { name = "gitpython", specifier = ">=3.1.41" },
     { name = "pydantic-settings", specifier = ">=2.0" },
+    { name = "ralph-tasks", editable = "tasks" },
     { name = "rich", specifier = ">=13.0" },
     { name = "typer", specifier = ">=0.9" },
 ]
@@ -1802,7 +1804,6 @@ name = "ralph-tasks"
 version = "0.0.1"
 source = { editable = "tasks" }
 dependencies = [
-    { name = "click" },
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "jinja2" },
@@ -1812,7 +1813,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = ">=8.1" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fastmcp", specifier = ">=2.0" },
     { name = "jinja2", specifier = ">=3.1" },

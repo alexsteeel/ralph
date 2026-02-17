@@ -1,4 +1,4 @@
-"""Simple web UI for task cloud visualization."""
+"""Web UI for task management (kanban board + project overview)."""
 
 import sys
 from datetime import datetime
@@ -182,17 +182,6 @@ async def get_monthly_tasks(month: str):
     # Sort by date descending (newest first)
     tasks_list.sort(key=lambda x: x["date"], reverse=True)
     return {"month": month, "tasks": tasks_list}
-
-
-@app.get("/project/{name}", response_class=HTMLResponse)
-async def tasks_cloud(request: Request, name: str):
-    """Display tasks of a project as a cloud."""
-    tasks = list_tasks(name)
-    return templates.TemplateResponse("tasks.html", {
-        "request": request,
-        "project": name,
-        "tasks": tasks,
-    })
 
 
 @app.get("/kanban/{name}", response_class=HTMLResponse)

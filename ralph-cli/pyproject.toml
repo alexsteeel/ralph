@@ -12,7 +12,11 @@ dependencies = [
     "pydantic-settings>=2.0",
     "gitpython>=3.1.41",
     "rich>=13.0",
+    "ralph-tasks",
 ]
+
+[tool.uv.sources]
+ralph-tasks = { workspace = true }
 
 [project.scripts]
 ralph = "ralph_cli.cli:main"

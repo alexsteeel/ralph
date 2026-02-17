@@ -1,5 +1,6 @@
 """Implement command - autonomous task implementation."""
 
+import logging
 import shutil
 import subprocess
 import time
@@ -16,91 +17,40 @@ from ..logging import SessionLog, format_duration
 from ..notify import Notifier
 from ..recovery import recovery_loop, should_recover, should_retry_fresh
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
 def get_project_stats(project: str) -> dict[str, int]:
-    """Get task status counts from project using tm CLI.
+    """Get task status counts from project via ralph_tasks.core.
 
-    Returns dict like {'done': 5, 'work': 1, 'hold': 0, 'backlog': 3}
-
-    Format of tm output:
-    - [ ] - backlog (todo)
-    - [x] - done
-    - [*] - work (in progress)
-    - [!] - hold
+    Returns dict like {'done': 5, 'work': 1, 'hold': 0, 'todo': 3}
     """
     try:
-        result = subprocess.run(
-            ["tm", "t", "ls", project],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return {}
+        from ralph_tasks.core import list_tasks
 
-        # Parse output - each line starts with status marker
+        tasks = list_tasks(project)
         stats: dict[str, int] = {}
-        status_map = {
-            "[ ]": "backlog",
-            "[x]": "done",
-            "[*]": "work",
-            "[!]": "hold",
-        }
-
-        for line in result.stdout.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            # Check status marker at start of line
-            for marker, status in status_map.items():
-                if line.startswith(marker):
-                    stats[status] = stats.get(status, 0) + 1
-                    break
-
+        for task in tasks:
+            stats[task.status] = stats.get(task.status, 0) + 1
         return stats
     except Exception:
+        logger.debug("Failed to get project stats for %s", project, exc_info=True)
         return {}
 
 
 def get_task_status(project: str, task_num: int) -> str | None:
-    """Get status of a specific task using tm CLI.
+    """Get status of a specific task via ralph_tasks.core.
 
-    Returns status string ('done', 'work', 'hold', 'backlog') or None.
+    Returns status string ('done', 'work', 'hold', 'todo', etc.) or None.
     """
     try:
-        result = subprocess.run(
-            ["tm", "t", "ls", project],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return None
+        from ralph_tasks.core import read_task
 
-        status_map = {
-            "[ ]": "backlog",
-            "[x]": "done",
-            "[*]": "work",
-            "[!]": "hold",
-        }
-
-        for line in result.stdout.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            # Check if this line is for our task (format: "[x] 1. Task title")
-            for marker, status in status_map.items():
-                if line.startswith(marker):
-                    # Extract task number after marker
-                    rest = line[len(marker) :].strip()
-                    if rest.startswith(f"{task_num}."):
-                        return status
-                    break
-
-        return None
+        task = read_task(project, task_num)
+        return task.status if task else None
     except Exception:
+        logger.debug("Failed to get task status for %s#%d", project, task_num, exc_info=True)
         return None
 
 

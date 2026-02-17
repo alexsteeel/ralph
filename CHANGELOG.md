@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Removed
+- Cloud view template (`tasks/templates/tasks.html`) and tm CLI (`tasks/ralph_tasks/cli.py`) (#8)
+  - Removed `tm` CLI (557 lines, click-based) — replaced by MCP server + direct API imports
+  - Removed `/project/{name}` route (cloud view) from web.py
+  - Removed view-toggle from kanban.html header
+  - Removed `click>=8.1` dependency from ralph-tasks
+  - Renamed entry point `tm-web` → `ralph-tasks-web`
+  - `ralph-cli` now imports `ralph_tasks.core` directly (workspace dependency) instead of subprocess `tm`
+
 ### Added
 - Neo4j graph database integration for ralph-tasks (#9)
   - Neo4j as shared Docker service in docker-compose (container `ai-sbx-neo4j`)

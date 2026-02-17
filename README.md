@@ -6,7 +6,7 @@ Monorepo for AI development automation tools.
 
 | Package | Directory | CLI Command | Description |
 |---------|-----------|-------------|-------------|
-| `ralph-tasks` | `tasks/` | `tm`, `tm-web`, `ralph-tasks` (MCP) | Markdown-based task management |
+| `ralph-tasks` | `tasks/` | `ralph-tasks` (MCP), `ralph-tasks-web` | Markdown-based task management |
 | `ralph-sandbox` | `sandbox/` | `ai-sbx` | Devcontainer management for AI agents |
 | `ralph-cli` | `ralph-cli/` | `ralph` | Autonomous task execution with API recovery |
 
@@ -53,9 +53,8 @@ uv run ruff format --check .
 ### CLI Commands
 
 ```bash
-# Task management
-uv run tm --help
-uv run tm-web --help
+# Task management web UI
+uv run ralph-tasks-web
 
 # Devcontainer management
 uv run ai-sbx --help

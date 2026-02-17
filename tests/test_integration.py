@@ -174,15 +174,16 @@ class TestCLIEntryPoints:
         )
         assert result.returncode == 0
 
-    def test_tm_help(self):
+    def test_ralph_tasks_web_importable(self):
         result = subprocess.run(
-            ["uv", "run", "tm", "--help"],
+            ["uv", "run", "python", "-c", "from ralph_tasks.web import main; print('ok')"],
             capture_output=True,
             text=True,
             timeout=30,
             cwd=ROOT,
         )
         assert result.returncode == 0
+        assert "ok" in result.stdout
 
 
 class TestMCPServer:
