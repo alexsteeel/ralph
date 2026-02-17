@@ -19,6 +19,7 @@ from ralph_tasks.graph.crud import (
     get_project_by_name,
     get_section,
     get_task,
+    get_task_full,
     get_workspace,
     list_comments,
     list_findings,
@@ -28,11 +29,13 @@ from ralph_tasks.graph.crud import (
     list_workspaces,
     remove_dependency,
     reply_to_comment,
+    sync_dependencies,
     update_finding_status,
     update_section,
     update_task,
     update_workflow_run,
     update_workflow_step,
+    upsert_section,
 )
 from ralph_tasks.graph.schema import drop_schema, ensure_schema
 
@@ -57,6 +60,7 @@ __all__ = [
     "get_project_by_name",
     "get_section",
     "get_task",
+    "get_task_full",
     "get_workspace",
     "list_comments",
     "list_findings",
@@ -66,9 +70,11 @@ __all__ = [
     "list_workspaces",
     "remove_dependency",
     "reply_to_comment",
+    "sync_dependencies",
     "update_finding_status",
     "update_section",
     "update_task",
     "update_workflow_run",
     "update_workflow_step",
+    "upsert_section",
 ]

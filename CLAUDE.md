@@ -31,7 +31,7 @@ ralph/
 
 | Package | Directory | CLI Commands | Description |
 |---------|-----------|--------------|-------------|
-| `ralph-tasks` | `tasks/` | `ralph-tasks serve`, `ralph-tasks-web` | Markdown task management + MCP server |
+| `ralph-tasks` | `tasks/` | `ralph-tasks serve`, `ralph-tasks-web` | Neo4j-backed task management + MCP server |
 | `ralph-sandbox` | `sandbox/` | `ai-sbx` | Devcontainer management for AI agents |
 | `ralph-cli` | `ralph-cli/` | `ralph` | Autonomous task execution with API recovery |
 

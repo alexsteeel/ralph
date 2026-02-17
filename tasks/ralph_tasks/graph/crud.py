@@ -157,7 +157,11 @@ def create_task(
     description: str,
     **fields: Any,
 ) -> dict:
-    """Create a Task under a Project. Auto-assigns next number atomically."""
+    """Create a Task under a Project.
+
+    If ``number`` is provided in fields, uses it directly;
+    otherwise auto-assigns next number atomically.
+    """
     now = _now()
     props: dict[str, Any] = {
         "description": description,
@@ -165,22 +169,36 @@ def create_task(
         "created_at": now,
         "updated_at": now,
     }
-    for field in ("started", "completed"):
-        if fields.get(field):
-            props[field] = fields[field]
+    for field in ("started", "completed", "module", "branch"):
+        val = fields.get(field)
+        if val is not None:
+            props[field] = val
 
-    result = session.run(
-        """
-        MATCH (p:Project {name: $project})
-        OPTIONAL MATCH (p)-[:HAS_TASK]->(existing:Task)
-        WITH p, COALESCE(MAX(existing.number), 0) + 1 AS next_number
-        CREATE (p)-[:HAS_TASK]->(t:Task $props)
-        SET t.number = next_number
-        RETURN t {.*} AS task
-        """,
-        project=project_name,
-        props=props,
-    )
+    explicit_number = fields.get("number")
+    if explicit_number is not None:
+        props["number"] = explicit_number
+        result = session.run(
+            """
+            MATCH (p:Project {name: $project})
+            CREATE (p)-[:HAS_TASK]->(t:Task $props)
+            RETURN t {.*} AS task
+            """,
+            project=project_name,
+            props=props,
+        )
+    else:
+        result = session.run(
+            """
+            MATCH (p:Project {name: $project})
+            OPTIONAL MATCH (p)-[:HAS_TASK]->(existing:Task)
+            WITH p, COALESCE(MAX(existing.number), 0) + 1 AS next_number
+            CREATE (p)-[:HAS_TASK]->(t:Task $props)
+            SET t.number = next_number
+            RETURN t {.*} AS task
+            """,
+            project=project_name,
+            props=props,
+        )
     record = result.single()
     if record is None:
         raise ValueError(f"Project '{project_name}' not found")
@@ -256,6 +274,115 @@ def delete_task(session: Session, project_name: str, number: int) -> bool:
     )
     record = result.single()
     return record is not None and record["deleted"] > 0
+
+
+def get_task_full(session: Session, project_name: str, number: int) -> dict | None:
+    """Load a Task with all its Sections and depends_on in one query.
+
+    Returns a dict with task properties plus ``section_<type>`` keys
+    for each attached Section's content, and ``depends_on`` list of ints.
+    Returns None if the task does not exist.
+    """
+    result = session.run(
+        """
+        MATCH (p:Project {name: $project})-[:HAS_TASK]->(t:Task {number: $number})
+        OPTIONAL MATCH (t)-[:HAS_SECTION]->(s:Section)
+        OPTIONAL MATCH (t)-[:DEPENDS_ON]->(dep:Task)
+        WITH t, collect(DISTINCT {type: s.type, content: s.content}) AS sections,
+             collect(DISTINCT dep.number) AS deps
+        RETURN t {.*} AS task, sections, deps
+        """,
+        project=project_name,
+        number=number,
+    )
+    record = result.single()
+    if record is None:
+        return None
+    task_dict = dict(record["task"])
+    for sec in record["sections"]:
+        if sec["type"] is not None:
+            task_dict[f"section_{sec['type']}"] = sec["content"] or ""
+    # Filter out None from deps (comes from OPTIONAL MATCH when no deps)
+    task_dict["depends_on"] = sorted([d for d in record["deps"] if d is not None])
+    return task_dict
+
+
+def upsert_section(
+    session: Session,
+    project_name: str,
+    task_number: int,
+    section_type: str,
+    content: str,
+) -> dict | None:
+    """Create or update a Section. Empty content deletes the section.
+
+    Returns section dict on create/update, None on delete.
+    """
+    if not content:
+        # Delete section if it exists
+        delete_section(session, project_name, task_number, section_type)
+        return None
+
+    now = _now()
+    result = session.run(
+        """
+        MATCH (p:Project {name: $project})-[:HAS_TASK]->(t:Task {number: $number})
+        MERGE (t)-[:HAS_SECTION]->(s:Section {type: $type})
+        ON CREATE SET s.content = $content, s.created_at = $now, s.updated_at = $now
+        ON MATCH SET s.content = $content, s.updated_at = $now
+        RETURN s {.*} AS section
+        """,
+        project=project_name,
+        number=task_number,
+        type=section_type,
+        content=content,
+        now=now,
+    )
+    record = result.single()
+    if record is None:
+        raise ValueError(f"Task #{task_number} not found in project '{project_name}'")
+    return dict(record["section"])
+
+
+def sync_dependencies(
+    session: Session,
+    project_name: str,
+    task_number: int,
+    depends_on: list[int],
+) -> list[int]:
+    """Replace all DEPENDS_ON relationships for a task.
+
+    Deletes existing DEPENDS_ON edges and creates new ones.
+    Returns the list of dependency numbers actually created.
+    """
+    # Delete existing dependencies
+    session.run(
+        """
+        MATCH (p:Project {name: $project})-[:HAS_TASK]->(t:Task {number: $number})
+              -[r:DEPENDS_ON]->()
+        DELETE r
+        """,
+        project=project_name,
+        number=task_number,
+    )
+
+    if not depends_on:
+        return []
+
+    # Create new dependencies
+    result = session.run(
+        """
+        MATCH (p:Project {name: $project})-[:HAS_TASK]->(t:Task {number: $number})
+        UNWIND $deps AS dep_num
+        MATCH (p)-[:HAS_TASK]->(dep:Task {number: dep_num})
+        MERGE (t)-[:DEPENDS_ON]->(dep)
+        RETURN dep.number AS dep_number
+        """,
+        project=project_name,
+        number=task_number,
+        deps=depends_on,
+    )
+    return sorted([r["dep_number"] for r in result])
 
 
 # ---------------------------------------------------------------------------

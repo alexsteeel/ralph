@@ -1,64 +1,67 @@
 """
-Core utilities for ralph-tasks.
+Core API for ralph-tasks — Neo4j-backed task management.
 
-Shared constants, data classes, and functions used by both
-the MCP server and CLI tool.
-
-File structure:
-~/.md-task-mcp/
-├── project-name/
-│   └── tasks/
-│       ├── 001-add-user-auth.md
-│       ├── 002-fix-login-bug.md
-│       └── ...
-
-Each task file format:
-# Task {N}: {description}
-status: todo|work|done
-worktree: /optional/path
-started: YYYY-MM-DD HH:MM
-completed: YYYY-MM-DD HH:MM
-
-## Description
-Task description here.
-
-## Plan
-Implementation plan here.
+Provides a clean public API for task/project CRUD operations.
+All data is stored in Neo4j graph database, except attachments
+which remain file-based.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
-import re
 import shutil
+from collections.abc import Generator
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from neo4j import Session
+
+from ralph_tasks.graph import crud
+from ralph_tasks.graph.client import GraphClient
+from ralph_tasks.graph.schema import ensure_schema
 
 # Constants
 BASE_DIR = Path.home() / ".md-task-mcp"
 LOG_FILE = Path("/tmp/md-task-mcp.log")
+DEFAULT_WORKSPACE = "default"
+VALID_STATUSES = {"todo", "work", "done", "approved", "hold"}
+
+# Section type mapping: Task dataclass field -> Neo4j Section type
+_SECTION_FIELDS = {
+    "body": "description",
+    "plan": "plan",
+    "report": "report",
+    "review": "review",
+    "blocks": "blocks",
+}
+
+# Task-level fields stored directly on the Task node
+_TASK_NODE_FIELDS = {"description", "status", "module", "branch", "started", "completed"}
+
 
 # Configure logging
-def _setup_logging() -> logging.Logger:
-    """Setup logging to file in /tmp/md-task-mcp.log"""
-    logger = logging.getLogger("md-task-mcp")
-    if not logger.handlers:
-        logger.setLevel(logging.DEBUG)
-        try:
-            handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
-            handler.setFormatter(logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S"
-            ))
-            logger.addHandler(handler)
-        except Exception:
-            # Fallback to NullHandler if can't write log
-            logger.addHandler(logging.NullHandler())
-    return logger
+logger = logging.getLogger("md-task-mcp")
+if not logger.handlers:
+    logger.setLevel(logging.DEBUG)
+    try:
+        _handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+        _handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            )
+        )
+        logger.addHandler(_handler)
+    except Exception:
+        logger.addHandler(logging.NullHandler())
+logger.info(
+    f"md-task-mcp core loaded (Neo4j). BASE_DIR={BASE_DIR}, uid={os.getuid()}, gid={os.getgid()}"
+)
 
-logger = _setup_logging()
-logger.info(f"md-task-mcp core loaded. BASE_DIR={BASE_DIR}, uid={os.getuid()}, gid={os.getgid()}")
 
 # Config file
 CONFIG_FILE = BASE_DIR / "config.json"
@@ -67,6 +70,7 @@ CONFIG_FILE = BASE_DIR / "config.json"
 def get_config() -> dict:
     """Read config from config.json."""
     import json
+
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, encoding="utf-8") as f:
@@ -79,35 +83,21 @@ def get_config() -> dict:
 def set_config(config: dict) -> None:
     """Write config to config.json."""
     import json
+
     BASE_DIR.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
     logger.info(f"Config saved: {config}")
 
 
-def get_backup_path() -> Path | None:
-    """Get backup path from config."""
-    config = get_config()
-    path = config.get("backup_path")
-    return Path(path) if path else None
-
-
-def set_backup_path(path: str | None) -> None:
-    """Set backup path in config."""
-    config = get_config()
-    if path:
-        config["backup_path"] = path
-    elif "backup_path" in config:
-        del config["backup_path"]
-    set_config(config)
-
-
-VALID_STATUSES = {"todo", "work", "done", "approved", "hold"}
+# ---------------------------------------------------------------------------
+# Task dataclass
+# ---------------------------------------------------------------------------
 
 
 @dataclass
 class Task:
-    """Represents a task (one file per task)."""
+    """Represents a task stored in Neo4j."""
 
     number: int
     description: str = ""
@@ -116,17 +106,16 @@ class Task:
     status: str = "todo"
     started: str | None = None
     completed: str | None = None
-    body: str = ""  # Description section content
-    plan: str = ""  # Plan section content
-    report: str = ""  # Report section content
-    review: str = ""  # Review section content
-    blocks: str = ""  # Blocks section content (what's blocking this task)
-    depends_on: list[int] = field(default_factory=list)  # Task dependencies
-    file_path: Path | None = field(default=None, repr=False)
-    mtime: float = 0.0  # File modification time (Unix timestamp)
+    body: str = ""
+    plan: str = ""
+    report: str = ""
+    review: str = ""
+    blocks: str = ""
+    depends_on: list[int] = field(default_factory=list)
+    updated_at: str = ""  # ISO 8601
 
     def to_dict(self) -> dict:
-        """Convert task to dictionary."""
+        """Convert task to dictionary for API responses."""
         return {
             "number": self.number,
             "description": self.description,
@@ -141,540 +130,375 @@ class Task:
             "review": self.review.strip(),
             "blocks": self.blocks.strip(),
             "depends_on": self.depends_on,
-            "mtime": self.mtime,
+            "mtime": _updated_at_to_timestamp(self.updated_at),
         }
 
 
-def ensure_base_dir() -> Path:
-    """Create base directory if it doesn't exist."""
-    BASE_DIR.mkdir(parents=True, exist_ok=True)
-    return BASE_DIR
+def _updated_at_to_timestamp(updated_at: str) -> float:
+    """Convert ISO 8601 updated_at to Unix timestamp for backwards compat."""
+    if not updated_at:
+        return 0.0
+    try:
+        dt = datetime.fromisoformat(updated_at)
+        return dt.timestamp()
+    except (ValueError, OSError):
+        return 0.0
 
 
-def get_project_dir(project: str, create: bool = False) -> Path:
-    """Get project directory path, optionally creating it."""
-    project_dir = BASE_DIR / project
-    if create:
-        project_dir.mkdir(parents=True, exist_ok=True)
-        (project_dir / "tasks").mkdir(exist_ok=True)
-    return project_dir
+# ---------------------------------------------------------------------------
+# Graph client management (singleton)
+# ---------------------------------------------------------------------------
+
+_client: GraphClient | None = None
+_schema_initialized: bool = False
 
 
-def get_tasks_dir(project: str, create: bool = False) -> Path:
-    """Get tasks directory for a project."""
-    project_dir = get_project_dir(project, create=create)
-    tasks_dir = project_dir / "tasks"
-    if create:
-        tasks_dir.mkdir(exist_ok=True)
-    return tasks_dir
+def _get_client() -> GraphClient:
+    """Get or create the singleton GraphClient."""
+    global _client
+    if _client is None:
+        _client = GraphClient()
+    return _client
 
 
-def slugify(text: str) -> str:
-    """Convert text to a filename-safe slug."""
-    text = text.lower().strip()
-    text = re.sub(r"[^\w\s-]", "", text)
-    text = re.sub(r"[-\s]+", "-", text)
-    return text[:50].strip("-")
+def _ensure_graph_ready() -> None:
+    """Ensure schema is initialized and default workspace exists."""
+    global _schema_initialized
+    client = _get_client()
+    if not _schema_initialized:
+        ensure_schema(client)
+        with client.session() as session:
+            ws = crud.get_workspace(session, DEFAULT_WORKSPACE)
+            if ws is None:
+                crud.create_workspace(session, DEFAULT_WORKSPACE)
+        _schema_initialized = True
 
 
-def get_task_filename(number: int, description: str) -> str:
-    """Generate task filename: NNN-slug.md"""
-    slug = slugify(description) or "untitled"
-    return f"{number:03d}-{slug}.md"
+def reset_client() -> None:
+    """Reset the graph client (for testing)."""
+    global _client, _schema_initialized
+    if _client is not None:
+        _client.close()
+    _client = None
+    _schema_initialized = False
 
 
-def parse_task_file(path: Path) -> Task | None:
+@contextlib.contextmanager
+def _session() -> Generator[Session, None, None]:
+    """Ensure graph is ready, then yield a Neo4j session."""
+    _ensure_graph_ready()
+    with _get_client().session() as session:
+        yield session
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _task_from_graph(d: dict) -> Task:
+    """Convert a graph result dict to Task dataclass.
+
+    Works for both full results (with section_* keys from get_task_full)
+    and summary results (from list_tasks, no sections).
     """
-    Parse a single task file into a Task object.
-
-    Format:
-    # Task {N}: {description}
-    status: todo|work|done
-    worktree: /optional/path
-    started: YYYY-MM-DD HH:MM
-    completed: YYYY-MM-DD HH:MM
-
-    ## Description
-    Task description here.
-
-    ## Plan
-    Implementation plan here.
-    """
-    if not path.exists():
-        return None
-
-    # Get file modification time
-    file_mtime = path.stat().st_mtime
-
-    content = path.read_text(encoding="utf-8")
-    lines = content.split("\n")
-
-    # Parse header: # Task {N}: {description}
-    header_pattern = re.compile(r"^#\s+Task\s+(\d+):\s*(.*)$")
-    metadata_pattern = re.compile(r"^(\w+):\s*(.*)$")
-
-    task: Task | None = None
-    current_section: str | None = None  # None, "description", "plan", "report"
-    section_content: list[str] = []
-
-    # Section order - defines valid transitions
-    # After blocks, no more sections can start (blocks is the last section)
-    section_order = ["description", "plan", "report", "review", "blocks"]
-
-    def get_section_index(section: str | None) -> int:
-        """Get the index of a section in the order, -1 if None."""
-        if section is None:
-            return -1
-        return section_order.index(section) if section in section_order else -1
-
-    def can_transition_to(new_section: str) -> bool:
-        """Check if we can transition from current_section to new_section."""
-        current_idx = get_section_index(current_section)
-        new_idx = get_section_index(new_section)
-        # Can only transition to a section that comes after current
-        return new_idx > current_idx
-
-    def save_section():
-        if task and current_section and section_content is not None:
-            content = "\n".join(section_content).strip()
-            # Unescape section headers in content
-            content = _unescape_section_headers(content)
-            if current_section == "description":
-                task.body = content
-            elif current_section == "plan":
-                task.plan = content
-            elif current_section == "report":
-                task.report = content
-            elif current_section == "review":
-                task.review = content
-            elif current_section == "blocks":
-                task.blocks = content
-
-    for line in lines:
-        # Check for task header
-        header_match = header_pattern.match(line)
-        if header_match:
-            task = Task(
-                number=int(header_match.group(1)),
-                description=header_match.group(2).strip(),
-                file_path=path,
-                mtime=file_mtime,
-            )
-            continue
-
-        if task is None:
-            continue
-
-        # Check for section headers (valid only in correct order)
-        line_lower = line.strip().lower()
-
-        # Try to match section headers
-        section_name = None
-        if line_lower == "## description":
-            section_name = "description"
-        elif line_lower == "## plan":
-            section_name = "plan"
-        elif line_lower == "## report":
-            section_name = "report"
-        elif line_lower == "## review":
-            section_name = "review"
-        elif line_lower == "## blocks":
-            section_name = "blocks"
-
-        # Section header is valid only if it follows the correct order
-        # This prevents "## Blocks" inside review content from being parsed as section
-        # (unless it's escaped with zero-width space during write)
-        if section_name and can_transition_to(section_name):
-            save_section()
-            current_section = section_name
-            section_content = []
-            continue
-
-        # Check for metadata (only before sections)
-        if current_section is None:
-            metadata_match = metadata_pattern.match(line)
-            if metadata_match:
-                key = metadata_match.group(1).lower()
-                value = metadata_match.group(2).strip()
-                if key == "status":
-                    task.status = value if value in VALID_STATUSES else "todo"
-                elif key == "module":
-                    task.module = value if value else None
-                elif key == "branch":
-                    task.branch = value if value else None
-                elif key == "started":
-                    task.started = value if value else None
-                elif key == "completed":
-                    task.completed = value if value else None
-                elif key == "depends_on":
-                    if value:
-                        task.depends_on = [
-                            int(x.strip()) for x in value.split(",")
-                            if x.strip().isdigit()
-                        ]
-        # Collect section content
-        if current_section is not None:
-            section_content.append(line)
-
-    # Save last section
-    save_section()
-
-    return task
+    return Task(
+        number=d["number"],
+        description=d.get("description", ""),
+        module=d.get("module"),
+        branch=d.get("branch"),
+        status=d.get("status", "todo"),
+        started=d.get("started"),
+        completed=d.get("completed"),
+        body=d.get("section_description", ""),
+        plan=d.get("section_plan", ""),
+        report=d.get("section_report", ""),
+        review=d.get("section_review", ""),
+        blocks=d.get("section_blocks", ""),
+        depends_on=d.get("depends_on", []),
+        updated_at=d.get("updated_at", ""),
+    )
 
 
-def list_tasks(project: str) -> list[Task]:
-    """List all tasks for a project by reading individual task files."""
-    tasks_dir = get_tasks_dir(project)
-    if not tasks_dir.exists():
-        return []
-
-    tasks: list[Task] = []
-    for task_file in sorted(tasks_dir.glob("*.md")):
-        task = parse_task_file(task_file)
-        if task:
-            tasks.append(task)
-
-    return sorted(tasks, key=lambda t: t.number)
+def _safe_name(name: str) -> str:
+    """Sanitize a name for use in filesystem paths (prevent path traversal)."""
+    safe = Path(name).name
+    if not safe or safe != name:
+        raise ValueError(f"Invalid name (contains path separators or is empty): {name!r}")
+    return safe
 
 
-def find_task_file(project: str, task_number: int) -> Path | None:
-    """Find existing task file by number."""
-    tasks_dir = get_tasks_dir(project)
-    if not tasks_dir.exists():
-        return None
-
-    pattern = f"{task_number:03d}-*.md"
-    matches = list(tasks_dir.glob(pattern))
-    return matches[0] if matches else None
+def _get_attachment_dir(project: str, number: int, create: bool = False) -> Path:
+    """Get attachment directory: ~/.md-task-mcp/<project>/attachments/<NNN>/"""
+    att_dir = BASE_DIR / _safe_name(project) / "attachments" / f"{number:03d}"
+    if create:
+        att_dir.mkdir(parents=True, exist_ok=True)
+    return att_dir
 
 
-def read_task(project: str, task_number: int) -> Task | None:
-    """Read a specific task by number."""
-    task_file = find_task_file(project, task_number)
-    if task_file is None:
-        logger.debug(f"Task #{task_number} not found in project '{project}'")
-        return None
-    logger.debug(f"Reading task #{task_number} from {task_file}")
-    return parse_task_file(task_file)
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
 
 
 def list_projects() -> list[str]:
     """List all project names."""
-    if not BASE_DIR.exists():
-        return []
-
-    return sorted([
-        d.name
-        for d in BASE_DIR.iterdir()
-        if d.is_dir() and not d.name.startswith(".")
-    ])
+    with _session() as session:
+        projects = crud.list_projects(session, DEFAULT_WORKSPACE)
+        return [p["name"] for p in projects]
 
 
-def get_project_description(project: str) -> str:
-    """Get project description from README.md."""
-    readme_path = get_project_dir(project) / "README.md"
-    if readme_path.exists():
-        return readme_path.read_text(encoding="utf-8").strip()
-    return ""
+def create_project(name: str, description: str = "") -> None:
+    """Create a project under the default workspace."""
+    with _session() as session:
+        if crud.get_project(session, DEFAULT_WORKSPACE, name) is None:
+            crud.create_project(session, DEFAULT_WORKSPACE, name, description)
 
 
-def set_project_description(project: str, description: str) -> None:
-    """Set project description in README.md."""
-    project_dir = get_project_dir(project, create=True)
-    readme_path = project_dir / "README.md"
-    readme_path.write_text(description.strip(), encoding="utf-8")
+def project_exists(name: str) -> bool:
+    """Check if a project exists."""
+    with _session() as session:
+        return crud.get_project(session, DEFAULT_WORKSPACE, name) is not None
 
 
-# Section headers that need escaping in content
-_SECTION_HEADERS = {"## description", "## plan", "## report", "## review", "## blocks"}
+def get_project_description(name: str) -> str:
+    """Get project description."""
+    with _session() as session:
+        proj = crud.get_project(session, DEFAULT_WORKSPACE, name)
+        return proj["description"] if proj else ""
 
 
-def _escape_section_headers(content: str) -> str:
-    """
-    Escape section headers in content to prevent parser confusion.
-
-    Replaces '## Section' with '##​Section' (with zero-width space U+200B)
-    only for known section headers at the start of a line.
-    """
-    if not content:
-        return content
-
-    lines = content.split("\n")
-    escaped_lines = []
-    for line in lines:
-        line_lower = line.strip().lower()
-        if line_lower in _SECTION_HEADERS:
-            # Insert zero-width space after ## to escape
-            escaped_lines.append(line.replace("## ", "##\u200b", 1))
+def set_project_description(name: str, description: str) -> None:
+    """Set project description (creates project if needed)."""
+    with _session() as session:
+        proj = crud.get_project(session, DEFAULT_WORKSPACE, name)
+        if proj is None:
+            crud.create_project(session, DEFAULT_WORKSPACE, name, description)
         else:
-            escaped_lines.append(line)
-    return "\n".join(escaped_lines)
+            session.run(
+                """
+                MATCH (w:Workspace {name: $ws})-[:CONTAINS_PROJECT]->(p:Project {name: $name})
+                SET p.description = $desc
+                """,
+                ws=DEFAULT_WORKSPACE,
+                name=name,
+                desc=description,
+            )
 
 
-def _unescape_section_headers(content: str) -> str:
+# ---------------------------------------------------------------------------
+# Tasks
+# ---------------------------------------------------------------------------
+
+
+def create_task(
+    project: str,
+    description: str,
+    body: str = "",
+    plan: str = "",
+    **fields: Any,
+) -> Task:
+    """Create a new task. Auto-creates project if needed.
+
+    Returns the created Task with all fields populated.
     """
-    Unescape section headers in content.
+    with _session() as session:
+        # Ensure project exists
+        if crud.get_project(session, DEFAULT_WORKSPACE, project) is None:
+            crud.create_project(session, DEFAULT_WORKSPACE, project)
 
-    Replaces '##​Section' (with zero-width space) back to '## Section'.
+        # Extract task-level fields
+        task_fields: dict[str, Any] = {
+            key: fields[key]
+            for key in ("status", "module", "branch", "started", "completed")
+            if fields.get(key) is not None
+        }
+
+        task_dict = crud.create_task(session, project, description, **task_fields)
+        task_number = task_dict["number"]
+
+        # Create sections for non-empty content
+        if body:
+            crud.upsert_section(session, project, task_number, "description", body)
+        if plan:
+            crud.upsert_section(session, project, task_number, "plan", plan)
+
+        # Handle depends_on
+        depends_on = fields.get("depends_on")
+        if depends_on:
+            crud.sync_dependencies(session, project, task_number, depends_on)
+
+        # Re-read full task
+        full = crud.get_task_full(session, project, task_number)
+        return _task_from_graph(full)
+
+
+def get_task(project: str, number: int) -> Task | None:
+    """Get a task with all sections and dependencies."""
+    with _session() as session:
+        full = crud.get_task_full(session, project, number)
+        if full is None:
+            return None
+        return _task_from_graph(full)
+
+
+def list_tasks(project: str) -> list[Task]:
+    """List all tasks for a project (summary, no section content)."""
+    with _session() as session:
+        tasks = crud.list_tasks(session, project)
+        return [_task_from_graph(t) for t in tasks]
+
+
+def update_task(project: str, number: int, **fields: Any) -> Task:
+    """Update task fields. Handles sections, dependencies, and auto-timestamps.
+
+    Raises ValueError if the task is not found.
     """
-    if not content:
-        return content
-    # Remove zero-width space after ##
-    return content.replace("##\u200b", "## ")
+    with _session() as session:
+        # Verify task exists
+        existing = crud.get_task(session, project, number)
+        if existing is None:
+            raise ValueError(f"Task #{number} not found in project '{project}'")
+
+        # Separate fields into categories
+        task_fields: dict[str, Any] = {}
+        section_updates: dict[str, str] = {}
+        new_depends_on: list[int] | None = None
+
+        for key, val in fields.items():
+            if key in _TASK_NODE_FIELDS:
+                task_fields[key] = val
+            elif key in _SECTION_FIELDS:
+                section_updates[key] = val
+            elif key == "depends_on":
+                new_depends_on = val
+
+        # Validate status early, before computing auto-timestamps
+        new_status = task_fields.get("status")
+        if new_status and new_status not in VALID_STATUSES:
+            raise ValueError(f"Invalid status '{new_status}'. Must be one of: {VALID_STATUSES}")
+
+        # Auto-timestamps
+        old_status = existing.get("status", "todo")
+        if new_status:
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+            if new_status == "work" and old_status != "work":
+                if "started" not in task_fields and not existing.get("started"):
+                    task_fields["started"] = now_str
+            if new_status in ("done", "approved") and old_status not in ("done", "approved"):
+                if "completed" not in task_fields and not existing.get("completed"):
+                    task_fields["completed"] = now_str
+
+        # Update task node fields
+        if task_fields:
+            crud.update_task(session, project, number, **task_fields)
+
+        # Update sections
+        for field_name, content in section_updates.items():
+            section_type = _SECTION_FIELDS[field_name]
+            crud.upsert_section(session, project, number, section_type, content)
+
+        # Update dependencies
+        if new_depends_on is not None:
+            crud.sync_dependencies(session, project, number, new_depends_on)
+
+        # Re-read and return
+        full = crud.get_task_full(session, project, number)
+        return _task_from_graph(full)
 
 
-def task_to_string(task: Task) -> str:
-    """Convert a Task object to markdown string."""
-    depends_str = ", ".join(map(str, task.depends_on)) if task.depends_on else ""
-    lines = [
-        f"# Task {task.number}: {task.description}",
-        f"status: {task.status}",
-        f"module: {task.module or ''}",
-        f"branch: {task.branch or ''}",
-        f"started: {task.started or ''}",
-        f"completed: {task.completed or ''}",
-        f"depends_on: {depends_str}",
-        "",
-        "## Description",
-    ]
-    if task.body.strip():
-        lines.append(_escape_section_headers(task.body.strip()))
-    lines.append("")
-    lines.append("## Plan")
-    if task.plan.strip():
-        lines.append(_escape_section_headers(task.plan.strip()))
-    lines.append("")
-    lines.append("## Report")
-    if task.report.strip():
-        lines.append(_escape_section_headers(task.report.strip()))
-    lines.append("")
-    lines.append("## Review")
-    if task.review.strip():
-        lines.append(_escape_section_headers(task.review.strip()))
-    lines.append("")
-    lines.append("## Blocks")
-    if task.blocks.strip():
-        lines.append(_escape_section_headers(task.blocks.strip()))
-    lines.append("")
-    return "\n".join(lines)
+def delete_task(project: str, number: int) -> bool:
+    """Delete a task and its attachments."""
+    with _session() as session:
+        deleted = crud.delete_task(session, project, number)
+
+    if deleted:
+        att_dir = _get_attachment_dir(project, number)
+        if att_dir.exists():
+            shutil.rmtree(att_dir)
+            logger.info(f"Deleted attachments directory: {att_dir}")
+
+    return deleted
 
 
-def write_task(project: str, task: Task) -> Path:
-    """Write a task to its file. Returns the file path."""
-    tasks_dir = get_tasks_dir(project, create=True)
-
-    # Remove old file if description changed (slug changed)
-    old_file = find_task_file(project, task.number)
-    new_filename = get_task_filename(task.number, task.description)
-
-    if old_file and old_file.name != new_filename:
-        logger.info(f"Removing old file: {old_file} (renamed to {new_filename})")
-
-        # Rename attachments directory if exists
-        old_attachments_dir = old_file.parent / old_file.stem
-        new_attachments_dir = old_file.parent / Path(new_filename).stem
-        if old_attachments_dir.exists() and old_attachments_dir.is_dir():
-            try:
-                old_attachments_dir.rename(new_attachments_dir)
-                logger.info(f"Renamed attachments dir: {old_attachments_dir} -> {new_attachments_dir}")
-            except Exception:
-                logger.exception(f"Failed to rename attachments dir {old_attachments_dir}")
-                raise
-
-        try:
-            old_file.unlink()
-        except Exception:
-            logger.exception(f"Failed to unlink old file {old_file}")
-            raise
-
-    # Write new file
-    task_path = tasks_dir / new_filename
-    logger.debug(f"Writing task #{task.number} to {task_path}")
-
-    # Log file info for debugging permission issues
-    if task_path.exists():
-        stat = task_path.stat()
-        logger.debug(
-            f"Existing file: uid={stat.st_uid}, gid={stat.st_gid}, "
-            f"mode={oct(stat.st_mode)}, size={stat.st_size}"
-        )
-
-    try:
-        content = task_to_string(task)
-        task_path.write_text(content, encoding="utf-8")
-        logger.info(f"Successfully wrote task #{task.number} to {task_path} ({len(content)} bytes)")
-    except PermissionError as e:
-        logger.error(
-            f"PermissionError writing {task_path}: {e}. "
-            f"Current user: uid={os.getuid()}, gid={os.getgid()}, groups={os.getgroups()}"
-        )
-        raise
-    except Exception:
-        logger.exception(f"Failed to write task #{task.number} to {task_path}")
-        raise
-
-    task.file_path = task_path
-    return task_path
+# ---------------------------------------------------------------------------
+# Attachments (file-based)
+# ---------------------------------------------------------------------------
 
 
-def get_next_task_number(project: str) -> int:
-    """Get the next available task number for a project."""
-    tasks = list_tasks(project)
-    if not tasks:
-        return 1
-    return max(t.number for t in tasks) + 1
-
-
-def delete_task(project: str, task_number: int) -> bool:
-    """Delete a task file and its attachments directory. Returns True if deleted, False if not found."""
-    task_file = find_task_file(project, task_number)
-    if task_file is None:
-        logger.debug(f"Task #{task_number} not found in project '{project}' for deletion")
-        return False
-    try:
-        # Delete attachments directory if exists
-        attachments_dir = task_file.parent / task_file.stem
-        if attachments_dir.exists() and attachments_dir.is_dir():
-            shutil.rmtree(attachments_dir)
-            logger.info(f"Deleted attachments directory: {attachments_dir}")
-
-        task_file.unlink()
-        logger.info(f"Deleted task #{task_number} from {task_file}")
-        return True
-    except Exception:
-        logger.exception(f"Failed to delete task #{task_number} from {task_file}")
-        raise
-
-
-# =============================================================================
-# Attachments functions
-# =============================================================================
-
-
-def get_attachments_dir(project: str, task_number: int, create: bool = False) -> Path | None:
-    """
-    Get attachments directory for a task.
-
-    The attachments directory has the same name as the task file stem.
-    E.g., for task file "001-add-auth.md", attachments are in "001-add-auth/".
-
-    Returns None if task doesn't exist.
-    """
-    task_file = find_task_file(project, task_number)
-    if task_file is None:
-        return None
-
-    attachments_dir = task_file.parent / task_file.stem
-    if create:
-        attachments_dir.mkdir(exist_ok=True)
-        logger.debug(f"Created attachments directory: {attachments_dir}")
-
-    return attachments_dir
-
-
-def list_attachments(project: str, task_number: int) -> list[dict]:
-    """
-    List all attachments for a task.
-
-    Returns list of dicts: [{"name": "file.png", "path": "/full/path", "size": 1234}, ...]
-    """
-    attachments_dir = get_attachments_dir(project, task_number)
-    if attachments_dir is None or not attachments_dir.exists():
+def list_attachments(project: str, number: int) -> list[dict]:
+    """List all attachments for a task."""
+    att_dir = _get_attachment_dir(project, number)
+    if not att_dir.exists():
         return []
 
-    result = []
-    for f in sorted(attachments_dir.iterdir()):
-        if f.is_file():
-            result.append({
-                "name": f.name,
-                "path": str(f),
-                "size": f.stat().st_size,
-            })
-
-    return result
+    return [
+        {"name": f.name, "path": str(f), "size": f.stat().st_size}
+        for f in sorted(att_dir.iterdir())
+        if f.is_file()
+    ]
 
 
-def add_attachment(project: str, task_number: int, filename: str, content: bytes) -> Path:
-    """
-    Add attachment to a task. Returns path to saved file.
-
-    Creates attachments directory if it doesn't exist.
-    """
-    attachments_dir = get_attachments_dir(project, task_number, create=True)
-    if attachments_dir is None:
-        raise ValueError(f"Task #{task_number} not found in project '{project}'")
-
-    # Sanitize filename
+def save_attachment(project: str, number: int, filename: str, content: bytes) -> dict:
+    """Save attachment content to a task. For web upload."""
+    att_dir = _get_attachment_dir(project, number, create=True)
     safe_filename = Path(filename).name
     if not safe_filename:
         raise ValueError("Invalid filename")
 
-    file_path = attachments_dir / safe_filename
+    file_path = att_dir / safe_filename
     file_path.write_bytes(content)
-    logger.info(f"Added attachment: {file_path} ({len(content)} bytes)")
-
-    return file_path
-
-
-def get_attachment_path(project: str, task_number: int, filename: str) -> Path | None:
-    """Get path to attachment file. Returns None if not found."""
-    attachments_dir = get_attachments_dir(project, task_number)
-    if attachments_dir is None:
-        return None
-
-    file_path = attachments_dir / filename
-    if file_path.exists() and file_path.is_file():
-        return file_path
-
-    return None
+    logger.info(f"Saved attachment: {file_path} ({len(content)} bytes)")
+    return {"name": file_path.name, "path": str(file_path), "size": len(content)}
 
 
-def delete_attachment(project: str, task_number: int, filename: str) -> bool:
-    """Delete an attachment. Returns True if deleted, False if not found."""
-    file_path = get_attachment_path(project, task_number, filename)
-    if file_path is None:
-        return False
-
-    try:
-        file_path.unlink()
-        logger.info(f"Deleted attachment: {file_path}")
-
-        # Remove empty attachments directory
-        attachments_dir = file_path.parent
-        if attachments_dir.exists() and not any(attachments_dir.iterdir()):
-            attachments_dir.rmdir()
-            logger.debug(f"Removed empty attachments directory: {attachments_dir}")
-
-        return True
-    except Exception:
-        logger.exception(f"Failed to delete attachment: {file_path}")
-        raise
-
-
-def copy_attachment(project: str, task_number: int, source_path: str, filename: str | None = None) -> Path:
-    """
-    Copy a file to task attachments.
-
-    Args:
-        project: Project name
-        task_number: Task number
-        source_path: Path to source file to copy
-        filename: Optional new filename (default: use source filename)
-
-    Returns path to copied file.
-    """
+def copy_attachment(
+    project: str, number: int, source_path: str, filename: str | None = None
+) -> dict:
+    """Copy a file to task attachments. For MCP."""
     source = Path(source_path)
     if not source.exists():
         raise FileNotFoundError(f"Source file not found: {source_path}")
 
-    attachments_dir = get_attachments_dir(project, task_number, create=True)
-    if attachments_dir is None:
-        raise ValueError(f"Task #{task_number} not found in project '{project}'")
-
-    target_filename = filename or source.name
-    target_path = attachments_dir / target_filename
-
+    att_dir = _get_attachment_dir(project, number, create=True)
+    target_filename = Path(filename).name if filename else source.name
+    if not target_filename:
+        raise ValueError("Invalid filename")
+    target_path = att_dir / target_filename
     shutil.copy2(source, target_path)
     logger.info(f"Copied attachment: {source} -> {target_path}")
+    return {
+        "name": target_path.name,
+        "path": str(target_path),
+        "size": target_path.stat().st_size,
+    }
 
-    return target_path
+
+def get_attachment_path(project: str, number: int, filename: str) -> Path | None:
+    """Get path to attachment file. Returns None if not found."""
+    att_dir = _get_attachment_dir(project, number)
+    safe_filename = Path(filename).name
+    if not safe_filename:
+        return None
+    file_path = att_dir / safe_filename
+    if file_path.exists() and file_path.is_file():
+        return file_path
+    return None
+
+
+def delete_attachment(project: str, number: int, filename: str) -> bool:
+    """Delete an attachment. Returns True if deleted, False if not found."""
+    file_path = get_attachment_path(project, number, filename)
+    if file_path is None:
+        return False
+
+    file_path.unlink()
+    logger.info(f"Deleted attachment: {file_path}")
+
+    # Remove empty directory
+    att_dir = file_path.parent
+    if att_dir.exists() and not any(att_dir.iterdir()):
+        att_dir.rmdir()
+        logger.debug(f"Removed empty attachments directory: {att_dir}")
+
+    return True

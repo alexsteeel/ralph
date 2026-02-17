@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+- **core.py rewritten: file storage → Neo4j graph database** (#10)
+  - All task/project CRUD operations now use Neo4j via `graph/crud.py`
+  - New clean public API: `create_task()`, `get_task()`, `update_task()`, `list_tasks()`
+  - Removed file-based functions: `read_task()`, `write_task()`, `parse_task_file()`, `task_to_string()`
+  - Task dataclass: removed `file_path`/`mtime`, added `updated_at` (ISO 8601)
+  - Auto-timestamps in core: `started` on status→work, `completed` on status→done/approved
+  - Attachments remain file-based at `~/.md-task-mcp/<project>/attachments/<NNN>/`
+  - Path traversal protection: `_safe_name()` for project names, `Path(filename).name` for filenames
+  - mcp.py simplified: thin delegation to core API
+  - web.py simplified: removed backup functionality, uses core API directly
+  - Old file-based core preserved as `core_file.py` for migration task (#11)
+  - New tests: `test_core_neo4j.py` (34 tests), `test_core_file.py` (5 tests)
+  - Extended `graph/crud.py` with `get_task_full()`, `upsert_section()`, `sync_dependencies()`
+
 ### Removed
 - Cloud view template (`tasks/templates/tasks.html`) and tm CLI (`tasks/ralph_tasks/cli.py`) (#8)
   - Removed `tm` CLI (557 lines, click-based) — replaced by MCP server + direct API imports

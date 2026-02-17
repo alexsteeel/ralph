@@ -45,9 +45,9 @@ def get_task_status(project: str, task_num: int) -> str | None:
     Returns status string ('done', 'work', 'hold', 'todo', etc.) or None.
     """
     try:
-        from ralph_tasks.core import read_task
+        from ralph_tasks.core import get_task
 
-        task = read_task(project, task_num)
+        task = get_task(project, task_num)
         return task.status if task else None
     except Exception:
         logger.debug("Failed to get task status for %s#%d", project, task_num, exc_info=True)

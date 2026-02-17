@@ -393,3 +393,121 @@ class TestWorkflowCRUD:
         )
         assert updated["status"] == "completed"
         assert updated["output"] == "All checks passed"
+
+
+@pytest.mark.neo4j
+class TestGetTaskFull:
+    def test_get_task_full_with_sections(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        crud.create_section(neo4j_session, "proj", 1, "description", "Body text")
+        crud.create_section(neo4j_session, "proj", 1, "plan", "Plan text")
+        full = crud.get_task_full(neo4j_session, "proj", 1)
+        assert full is not None
+        assert full["description"] == "Task"
+        assert full["section_description"] == "Body text"
+        assert full["section_plan"] == "Plan text"
+
+    def test_get_task_full_with_depends(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task 1")
+        crud.create_task(neo4j_session, "proj", "Task 2")
+        crud.add_dependency(neo4j_session, "proj", 2, 1)
+        full = crud.get_task_full(neo4j_session, "proj", 2)
+        assert full["depends_on"] == [1]
+
+    def test_get_task_full_not_found(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        assert crud.get_task_full(neo4j_session, "proj", 999) is None
+
+    def test_get_task_full_no_sections(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        full = crud.get_task_full(neo4j_session, "proj", 1)
+        assert full is not None
+        assert full["depends_on"] == []
+        # No section_* keys for missing sections
+
+
+@pytest.mark.neo4j
+class TestUpsertSection:
+    def test_upsert_creates_section(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        result = crud.upsert_section(neo4j_session, "proj", 1, "plan", "New plan")
+        assert result is not None
+        assert result["content"] == "New plan"
+
+    def test_upsert_updates_existing(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        crud.upsert_section(neo4j_session, "proj", 1, "plan", "v1")
+        result = crud.upsert_section(neo4j_session, "proj", 1, "plan", "v2")
+        assert result["content"] == "v2"
+
+    def test_upsert_empty_deletes(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        crud.upsert_section(neo4j_session, "proj", 1, "plan", "Content")
+        result = crud.upsert_section(neo4j_session, "proj", 1, "plan", "")
+        assert result is None
+        assert crud.get_section(neo4j_session, "proj", 1, "plan") is None
+
+
+@pytest.mark.neo4j
+class TestSyncDependencies:
+    def test_sync_creates_deps(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task 1")
+        crud.create_task(neo4j_session, "proj", "Task 2")
+        crud.create_task(neo4j_session, "proj", "Task 3")
+        result = crud.sync_dependencies(neo4j_session, "proj", 3, [1, 2])
+        assert result == [1, 2]
+        deps = crud.get_dependencies(neo4j_session, "proj", 3)
+        assert len(deps) == 2
+
+    def test_sync_replaces_deps(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task 1")
+        crud.create_task(neo4j_session, "proj", "Task 2")
+        crud.create_task(neo4j_session, "proj", "Task 3")
+        crud.sync_dependencies(neo4j_session, "proj", 3, [1, 2])
+        result = crud.sync_dependencies(neo4j_session, "proj", 3, [1])
+        assert result == [1]
+        deps = crud.get_dependencies(neo4j_session, "proj", 3)
+        assert len(deps) == 1
+
+    def test_sync_empty_clears_deps(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task 1")
+        crud.create_task(neo4j_session, "proj", "Task 2")
+        crud.sync_dependencies(neo4j_session, "proj", 2, [1])
+        crud.sync_dependencies(neo4j_session, "proj", 2, [])
+        deps = crud.get_dependencies(neo4j_session, "proj", 2)
+        assert len(deps) == 0
+
+
+@pytest.mark.neo4j
+class TestCreateTaskExtended:
+    def test_create_task_with_module_and_branch(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        task = crud.create_task(neo4j_session, "proj", "Task", module="auth", branch="feat/auth")
+        assert task["module"] == "auth"
+        assert task["branch"] == "feat/auth"
+
+    def test_create_task_with_explicit_number(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        task = crud.create_task(neo4j_session, "proj", "Task", number=42)
+        assert task["number"] == 42

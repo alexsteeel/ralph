@@ -12,15 +12,17 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from .core import (
-    VALID_STATUSES,
-    Task,
     copy_attachment,
-    get_next_task_number,
-    get_project_dir,
-    write_task,
+    project_exists,
+)
+from .core import (
+    create_task as _create_task,
 )
 from .core import (
     delete_attachment as _delete_attachment,
+)
+from .core import (
+    get_task as _get_task,
 )
 from .core import (
     list_attachments as _list_attachments,
@@ -32,10 +34,18 @@ from .core import (
     list_tasks as _list_tasks,
 )
 from .core import (
-    read_task as _read_task,
+    update_task as _update_task,
 )
 
 mcp = FastMCP("ralph-tasks")
+
+
+def _require_task(project: str, number: int) -> None:
+    """Validate that a project and task exist, raising ValueError if not."""
+    if not project_exists(project):
+        raise ValueError(f"Project '{project}' does not exist")
+    if _get_task(project, number) is None:
+        raise ValueError(f"Task #{number} not found in project '{project}'")
 
 
 @mcp.tool
@@ -63,24 +73,25 @@ def tasks(project: str | None = None, number: int | None = None) -> dict | list:
         result = []
         for proj in projects:
             proj_tasks = _list_tasks(proj)
-            result.append({
-                "project": proj,
-                "task_count": len(proj_tasks),
-                "by_status": {
-                    "work": sum(1 for t in proj_tasks if t.status == "work"),
-                    "todo": sum(1 for t in proj_tasks if t.status == "todo"),
-                    "done": sum(1 for t in proj_tasks if t.status == "done"),
-                },
-                "tasks": [
-                    {"number": t.number, "description": t.description, "status": t.status}
-                    for t in proj_tasks
-                ],
-            })
+            result.append(
+                {
+                    "project": proj,
+                    "task_count": len(proj_tasks),
+                    "by_status": {
+                        "work": sum(1 for t in proj_tasks if t.status == "work"),
+                        "todo": sum(1 for t in proj_tasks if t.status == "todo"),
+                        "done": sum(1 for t in proj_tasks if t.status == "done"),
+                    },
+                    "tasks": [
+                        {"number": t.number, "description": t.description, "status": t.status}
+                        for t in proj_tasks
+                    ],
+                }
+            )
         return result
 
     # Project specified: check it exists
-    project_dir = get_project_dir(project)
-    if not project_dir.exists():
+    if not project_exists(project):
         raise ValueError(f"Project '{project}' does not exist")
 
     # Project only: list tasks in project
@@ -92,7 +103,7 @@ def tasks(project: str | None = None, number: int | None = None) -> dict | list:
         ]
 
     # Project + number: get full task details
-    task = _read_task(project, number)
+    task = _get_task(project, number)
     if task is None:
         raise ValueError(f"Task #{number} not found in project '{project}'")
 
@@ -118,22 +129,8 @@ def create_task(
     Returns:
         Created task details including number and file path
     """
-    # Ensure project exists
-    get_project_dir(project, create=True)
-
-    task_number = get_next_task_number(project)
-    task = Task(
-        number=task_number,
-        description=description,
-        body=body,
-        plan=plan,
-    )
-
-    task_path = write_task(project, task)
-
-    result = task.to_dict()
-    result["file_path"] = str(task_path)
-    return result
+    task = _create_task(project, description, body=body, plan=plan)
+    return task.to_dict()
 
 
 @mcp.tool
@@ -173,43 +170,25 @@ def update_task(
     Returns:
         Updated task details
     """
-    project_dir = get_project_dir(project)
+    fields = {
+        key: val
+        for key, val in {
+            "description": description,
+            "status": status,
+            "module": module,
+            "plan": plan,
+            "body": body,
+            "report": report,
+            "review": review,
+            "branch": branch,
+            "started": started,
+            "completed": completed,
+            "depends_on": depends_on,
+        }.items()
+        if val is not None
+    }
 
-    if not project_dir.exists():
-        raise ValueError(f"Project '{project}' does not exist")
-
-    if status and status not in VALID_STATUSES:
-        raise ValueError(f"Invalid status '{status}'. Must be one of: {VALID_STATUSES}")
-
-    task = _read_task(project, number)
-    if task is None:
-        raise ValueError(f"Task #{number} not found in project '{project}'")
-
-    # Update fields if provided
-    if description is not None:
-        task.description = description
-    if status is not None:
-        task.status = status
-    if module is not None:
-        task.module = module if module else None
-    if plan is not None:
-        task.plan = plan
-    if body is not None:
-        task.body = body
-    if report is not None:
-        task.report = report
-    if review is not None:
-        task.review = review
-    if branch is not None:
-        task.branch = branch if branch else None
-    if started is not None:
-        task.started = started if started else None
-    if completed is not None:
-        task.completed = completed if completed else None
-    if depends_on is not None:
-        task.depends_on = depends_on
-
-    write_task(project, task)
+    task = _update_task(project, number, **fields)
     return task.to_dict()
 
 
@@ -234,14 +213,7 @@ def list_attachments(project: str, number: int) -> list[dict]:
         Use Claude's Read tool to view attachment contents.
         Read tool supports images (PNG, JPG, etc.) natively.
     """
-    project_dir = get_project_dir(project)
-    if not project_dir.exists():
-        raise ValueError(f"Project '{project}' does not exist")
-
-    task = _read_task(project, number)
-    if task is None:
-        raise ValueError(f"Task #{number} not found in project '{project}'")
-
+    _require_task(project, number)
     return _list_attachments(project, number)
 
 
@@ -264,22 +236,9 @@ def add_attachment(
     Returns:
         {"ok": True, "name": "filename", "path": "/full/path", "size": 1234}
     """
-    project_dir = get_project_dir(project)
-    if not project_dir.exists():
-        raise ValueError(f"Project '{project}' does not exist")
-
-    task = _read_task(project, number)
-    if task is None:
-        raise ValueError(f"Task #{number} not found in project '{project}'")
-
-    file_path = copy_attachment(project, number, source_path, filename)
-
-    return {
-        "ok": True,
-        "name": file_path.name,
-        "path": str(file_path),
-        "size": file_path.stat().st_size,
-    }
+    _require_task(project, number)
+    result = copy_attachment(project, number, source_path, filename)
+    return {"ok": True, **result}
 
 
 @mcp.tool
@@ -295,14 +254,7 @@ def delete_attachment(project: str, number: int, filename: str) -> dict:
     Returns:
         {"ok": True} if deleted, raises error if not found
     """
-    project_dir = get_project_dir(project)
-    if not project_dir.exists():
-        raise ValueError(f"Project '{project}' does not exist")
-
-    task = _read_task(project, number)
-    if task is None:
-        raise ValueError(f"Task #{number} not found in project '{project}'")
-
+    _require_task(project, number)
     if not _delete_attachment(project, number, filename):
         raise ValueError(f"Attachment '{filename}' not found for task #{number}")
 
