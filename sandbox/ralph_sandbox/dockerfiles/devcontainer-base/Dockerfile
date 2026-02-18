@@ -116,8 +116,11 @@ RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-tasks/
     && rm -rf /tmp/ralph-tasks/
 
 # Install Ralph CLI (autonomous task execution with API recovery)
+# Strip [tool.uv.sources] — workspace references don't work outside uv workspace;
+# ralph-tasks is already installed above.
 COPY ralph-cli/ /tmp/ralph-cli/
-RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-cli/ \
+RUN sed -i '/\[tool.uv.sources\]/d; /ralph-tasks.*workspace.*true/d' /tmp/ralph-cli/pyproject.toml \
+    && uv pip install --system --break-system-packages --no-cache /tmp/ralph-cli/ \
     && rm -rf /tmp/ralph-cli/
 
 # Install shfmt

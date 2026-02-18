@@ -56,12 +56,12 @@ services:
 
   # MinIO S3-compatible object storage for task attachments
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: ai-sbx-minio
     restart: unless-stopped
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Console UI
+      - "59000:9000"   # S3 API
+      - "59001:9001"   # Console UI
     volumes:
       - ai-sbx-minio-data:/data
     environment:
