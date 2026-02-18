@@ -203,14 +203,15 @@ class StreamMonitor:
     def _process_init(self, data: dict):
         """Process system init message."""
         self.model = data.get("model", "unknown")
-        self.session_id = data.get("session_id", "")[:8]
+        self.session_id = data.get("session_id", "")
         mcp_servers = data.get("mcp_servers", [])
         mcp_status = ", ".join(
             f"{s['name']}({'ok' if s.get('status') == 'connected' else 'fail'})"
             for s in mcp_servers
         )
+        short_id = self.session_id[:8] if self.session_id else "none"
         self._write(
-            f"{DIM}Session: {self.session_id} | Model: {self.model} | MCP: {mcp_status or 'none'}{NC}"
+            f"{DIM}Session: {short_id} | Model: {self.model} | MCP: {mcp_status or 'none'}{NC}"
         )
 
     def _process_result(self, data: dict):
