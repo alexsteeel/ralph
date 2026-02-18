@@ -161,13 +161,21 @@ def get_object(project: str, task_number: int, filename: str) -> bytes | None:
         raise
 
 
+def _object_prefix(project: str, task_number: int) -> str:
+    """Build sanitized object prefix: {project}/{NNN}/."""
+    safe_project = _sanitize_key_component(project)
+    if not safe_project:
+        raise ValueError(f"Invalid project name: {project!r}")
+    return f"{safe_project}/{task_number:03d}/"
+
+
 def list_objects(project: str, task_number: int) -> list[dict]:
     """List all objects for a task.
 
     Returns list of {"name": filename, "size": int}.
     """
     client, bucket = _ready()
-    prefix = f"{project}/{task_number:03d}/"
+    prefix = _object_prefix(project, task_number)
 
     return [
         {"name": Path(obj.object_name).name, "size": obj.size}
@@ -196,7 +204,7 @@ def delete_all_objects(project: str, task_number: int) -> int:
     Returns the number of objects deleted.
     """
     client, bucket = _ready()
-    prefix = f"{project}/{task_number:03d}/"
+    prefix = _object_prefix(project, task_number)
 
     count = 0
     for obj in client.list_objects(bucket, prefix=prefix):

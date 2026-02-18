@@ -36,10 +36,11 @@ class TestFindMonorepoRoot:
     @patch("ralph_sandbox.commands.image._find_dockerfiles_dir")
     def test_walks_up_to_find_monorepo(self, mock_dockerfiles_dir, tmp_path):
         """Test that it walks up directory tree to find monorepo root."""
-        # Create structure: root/uv.lock + tasks/ + sandbox/, root/a/b/c (dockerfiles dir)
+        # Create structure: root/uv.lock + tasks/ + sandbox/ + ralph-cli/, root/a/b/c (dockerfiles dir)
         (tmp_path / "uv.lock").touch()
         (tmp_path / "tasks").mkdir()
         (tmp_path / "sandbox").mkdir()
+        (tmp_path / "ralph-cli").mkdir()
         deep = tmp_path / "a" / "b" / "c"
         deep.mkdir(parents=True)
         mock_dockerfiles_dir.return_value = deep
@@ -67,12 +68,13 @@ class TestFindMonorepoRoot:
         """Test fallback to git rev-parse when walk-up fails."""
         mock_dockerfiles_dir.return_value = None
 
-        # Simulate git returning a root with uv.lock + tasks/ + sandbox/
+        # Simulate git returning a root with uv.lock + tasks/ + sandbox/ + ralph-cli/
         git_root = tmp_path / "repo"
         git_root.mkdir()
         (git_root / "uv.lock").touch()
         (git_root / "tasks").mkdir()
         (git_root / "sandbox").mkdir()
+        (git_root / "ralph-cli").mkdir()
 
         with patch("ralph_sandbox.commands.image.subprocess") as mock_subprocess:
             mock_result = Mock()
@@ -136,16 +138,25 @@ class TestBuildCommandMonorepoRoot:
     """Test build command integration with _find_monorepo_root."""
 
     @patch("ralph_sandbox.commands.image._find_monorepo_root")
+    @patch("ralph_sandbox.commands.image._image_exists")
     @patch("ralph_sandbox.commands.image._find_dockerfiles_dir")
     @patch("ralph_sandbox.commands.image.is_docker_running")
-    def test_build_fails_without_monorepo_root(self, mock_docker, mock_dockerfiles, mock_root):
+    def test_build_fails_without_monorepo_root(
+        self, mock_docker, mock_dockerfiles, mock_image_exists, mock_root, tmp_path
+    ):
         """Test build exits with error when monorepo root not found."""
         mock_docker.return_value = True
-        mock_dockerfiles.return_value = Path("/fake/dockerfiles")
+        # Create fake dockerfiles dir with at least one image subdir
+        dockerfiles_dir = tmp_path / "dockerfiles"
+        (dockerfiles_dir / "tinyproxy-base").mkdir(parents=True)
+        (dockerfiles_dir / "tinyproxy-base" / "Dockerfile").touch()
+        mock_dockerfiles.return_value = dockerfiles_dir
+        # Image doesn't exist so it needs building
+        mock_image_exists.return_value = False
         mock_root.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["image", "build"])
+        result = runner.invoke(cli, ["image", "build", "--force"])
 
         assert result.exit_code != 0
         assert "monorepo root" in result.output.lower()

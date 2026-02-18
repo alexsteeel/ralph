@@ -4,7 +4,9 @@ import io
 import os
 import sys
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -59,11 +61,21 @@ def find_templates_dir() -> Path:
     )
 
 
-app = FastAPI(title="Task Cloud")
+_mcp_http_app = get_mcp_http_app()
+
+
+@asynccontextmanager
+async def lifespan(app):
+    """Run MCP sub-app lifespan to initialize its session manager."""
+    async with _mcp_http_app.router.lifespan_context(_mcp_http_app):
+        yield
+
+
+app = FastAPI(title="Task Cloud", lifespan=lifespan)
 templates = Jinja2Templates(directory=find_templates_dir())
 
 # Mount MCP server under /mcp for streamable-http access
-app.mount("/mcp", get_mcp_http_app(), name="mcp")
+app.mount("/mcp", _mcp_http_app, name="mcp")
 
 
 @app.get("/health")
@@ -310,14 +322,20 @@ async def download_attachment_endpoint(project: str, number: int, filename: str)
     if content is None:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
+    safe_name = Path(filename).name
+    # ASCII-safe fallback + RFC 5987 encoding for non-ASCII filenames
+    ascii_name = safe_name.encode("ascii", "replace").decode("ascii").replace('"', '\\"')
+    disposition = f'attachment; filename="{ascii_name}"'
+    # Add filename* for non-ASCII (RFC 5987)
+    try:
+        safe_name.encode("ascii")
+    except UnicodeEncodeError:
+        disposition += f"; filename*=UTF-8''{quote(safe_name)}"
+
     return StreamingResponse(
         io.BytesIO(content),
         media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": 'attachment; filename="{}"'.format(
-                Path(filename).name.replace("\\", "\\\\").replace('"', '\\"')
-            )
-        },
+        headers={"Content-Disposition": disposition},
     )
 
 
@@ -327,17 +345,6 @@ async def delete_attachment_endpoint(project: str, number: int, filename: str):
     if delete_attachment(project, number, filename):
         return {"ok": True}
     raise HTTPException(status_code=404, detail="Attachment not found")
-
-
-# =============================================================================
-# Settings API (simplified — no backup)
-# =============================================================================
-
-
-@app.get("/api/settings")
-async def get_settings():
-    """Get current settings."""
-    return {}
 
 
 def main():

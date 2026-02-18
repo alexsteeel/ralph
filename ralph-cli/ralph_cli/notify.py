@@ -198,8 +198,14 @@ Resuming task {task_ref}"""
         if project_stats:
             lines.append("")
             lines.append("📋 *Project status:*")
-            status_order = ["done", "work", "hold", "backlog"]
-            status_icons = {"done": "✅", "work": "🔄", "hold": "⏸️", "backlog": "📝"}
+            status_order = ["done", "approved", "work", "todo", "hold"]
+            status_icons = {
+                "done": "✅",
+                "approved": "✅",
+                "work": "🔄",
+                "todo": "📝",
+                "hold": "⏸️",
+            }
             for status in status_order:
                 count = project_stats.get(status, 0)
                 if count > 0:
@@ -240,7 +246,13 @@ Retry {retry}/{max_retries} with fresh session"""
         status: str | None = None,
     ) -> bool:
         """Notify single task completion with stats."""
-        status_icons = {"done": "✅", "work": "🔄", "hold": "⏸️", "backlog": "📝"}
+        status_icons = {
+            "done": "✅",
+            "approved": "✅",
+            "work": "🔄",
+            "todo": "📝",
+            "hold": "⏸️",
+        }
         status_line = ""
         if status:
             icon = status_icons.get(status, "•")

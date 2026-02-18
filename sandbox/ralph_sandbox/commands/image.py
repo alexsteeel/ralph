@@ -78,13 +78,6 @@ def build(
         console.print("Please ensure ai-sbx is properly installed or run from repository.")
         sys.exit(1)
 
-    # Find monorepo root (build context for COPY from tasks/, ralph-cli/)
-    monorepo_root = _find_monorepo_root()
-    if not monorepo_root:
-        console.print("[red]Could not find monorepo root (uv.lock marker).[/red]")
-        console.print("Please run from within the ralph monorepo.")
-        sys.exit(1)
-
     # Build images directly using Python
     images_to_build = BUILD_ORDER if all else BUILD_ORDER[:5]  # First 5 are required
 
@@ -108,6 +101,14 @@ def build(
     if not images_to_process:
         console.print("[green]All images are already built. Use --force to rebuild.[/green]")
         return
+
+    # Find monorepo root (build context for COPY from tasks/, ralph-cli/)
+    # Deferred until after image existence check so no-op builds work outside monorepo
+    monorepo_root = _find_monorepo_root()
+    if not monorepo_root:
+        console.print("[red]Could not find monorepo root (uv.lock marker).[/red]")
+        console.print("Please run from within the ralph monorepo.")
+        sys.exit(1)
 
     total_images = len(images_to_process)
     console.print(
@@ -248,7 +249,12 @@ def _find_dockerfiles_dir() -> Path | None:
 
 def _is_ralph_monorepo(path: Path) -> bool:
     """Verify this is the ralph monorepo, not just any uv project."""
-    return (path / "uv.lock").exists() and (path / "tasks").is_dir() and (path / "sandbox").is_dir()
+    return (
+        (path / "uv.lock").exists()
+        and (path / "tasks").is_dir()
+        and (path / "sandbox").is_dir()
+        and (path / "ralph-cli").is_dir()
+    )
 
 
 def _find_monorepo_root() -> Path | None:

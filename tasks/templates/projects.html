@@ -6,7 +6,6 @@
 <header>
     <h1>Projects</h1>
     <button class="btn-create" onclick="openCreateModal('project')" title="Create Project">+</button>
-    <button class="btn-icon" onclick="openSettingsModal()" title="Settings" style="margin-left: auto;">&#9881;</button>
 </header>
 
 {% if project_count > 0 %}
@@ -162,87 +161,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && document.getElementById('monthly-modal').classList.contains('active')) {
         closeMonthlyModal();
     }
-    if (e.key === 'Escape' && document.getElementById('settings-modal').classList.contains('active')) {
-        closeSettingsModal();
-    }
-});
-
-// Settings modal
-async function openSettingsModal() {
-    const modal = document.getElementById('settings-modal');
-    const pathInput = document.getElementById('settings-backup-path');
-    const lastBackup = document.getElementById('settings-last-backup');
-
-    try {
-        const res = await fetch('/api/settings');
-        const data = await res.json();
-        pathInput.value = data.backup_path || '';
-        lastBackup.textContent = data.last_backup ? `Последний бэкап: ${data.last_backup}` : 'Бэкапы не создавались';
-    } catch (e) {
-        console.error(e);
-    }
-
-    modal.classList.add('active');
-}
-
-function closeSettingsModal() {
-    document.getElementById('settings-modal').classList.remove('active');
-}
-
-async function saveSettings() {
-    const pathInput = document.getElementById('settings-backup-path');
-    try {
-        const res = await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ backup_path: pathInput.value || null })
-        });
-        if (res.ok) {
-            closeSettingsModal();
-        } else {
-            const err = await res.json();
-            alert(err.detail || 'Ошибка сохранения');
-        }
-    } catch (e) {
-        alert('Ошибка сохранения');
-        console.error(e);
-    }
-}
-
-async function triggerBackup() {
-    try {
-        const res = await fetch('/api/backup', { method: 'POST' });
-        const data = await res.json();
-        alert(data.message);
-        openSettingsModal(); // Refresh last backup time
-    } catch (e) {
-        alert('Ошибка бэкапа');
-        console.error(e);
-    }
-}
-
-document.getElementById('settings-modal').addEventListener('click', e => {
-    if (e.target.id === 'settings-modal') closeSettingsModal();
 });
 </script>
 
-<!-- Settings Modal -->
-<div class="monthly-modal-overlay" id="settings-modal">
-    <div class="monthly-modal" style="max-width: 450px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <h2>Настройки</h2>
-            <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
-        </div>
-        <div class="form-group">
-            <label for="settings-backup-path">Путь для бэкапов (каждый час)</label>
-            <input type="text" id="settings-backup-path" placeholder="~/backups/tasks или /path/to/backup" style="width: 100%;">
-        </div>
-        <p id="settings-last-backup" style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0;"></p>
-        <div class="form-actions" style="margin-top: 1rem;">
-            <button class="btn btn-edit" onclick="triggerBackup()">Бэкап сейчас</button>
-            <button class="btn btn-cancel" onclick="closeSettingsModal()">Отмена</button>
-            <button class="btn btn-save" onclick="saveSettings()">Сохранить</button>
-        </div>
-    </div>
-</div>
 {% endblock %}

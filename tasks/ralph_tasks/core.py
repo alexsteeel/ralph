@@ -379,6 +379,9 @@ def update_task(project: str, number: int, **fields: Any) -> Task:
         # Update task node fields
         if task_fields:
             crud.update_task(session, project, number, **task_fields)
+        elif section_updates or new_depends_on is not None:
+            # Touch updated_at even when only sections or deps change
+            crud.update_task(session, project, number)
 
         # Update sections
         for field_name, content in section_updates.items():

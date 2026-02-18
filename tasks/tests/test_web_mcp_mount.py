@@ -64,10 +64,10 @@ class TestWebRoutesUnchanged:
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
 
-    def test_settings_api(self, client):
+    def test_settings_api_removed(self, client):
+        """Settings endpoint was removed along with backup functionality."""
         response = client.get("/api/settings")
-        assert response.status_code == 200
-        assert response.json() == {}
+        assert response.status_code == 404
 
     def test_task_api_404(self, client):
         """Non-existent task should 404 (mocking Neo4j)."""

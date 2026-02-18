@@ -123,17 +123,18 @@ The `ai-sbx image build` command uses the monorepo root as Docker build context,
 
 The ralph-tasks MCP server runs as a shared Docker container (`ai-sbx-ralph-tasks`) serving both the Kanban web UI and MCP endpoint on port 8000:
 
-- `http://ai-sbx-ralph-tasks:8000/` — Kanban web UI (FastAPI)
-- `http://ai-sbx-ralph-tasks:8000/mcp` — MCP endpoint (streamable-http)
-- `http://ai-sbx-ralph-tasks:8000/health` — Docker HEALTHCHECK
+- `http://docker:8000/` — Kanban web UI (from devcontainer, via DinD mapped port)
+- `http://docker:8000/mcp` — MCP endpoint (streamable-http)
+- `http://docker:8000/health` — Docker HEALTHCHECK
 
 Build: `docker build -f tasks/Dockerfile .` (from monorepo root).
 
 MCP server registration in `entrypoint.sh` (with health check fallback):
 ```bash
 # Prefer streamable-http if container is running, fallback to local stdio
-if curl -sf --max-time 3 "http://ai-sbx-ralph-tasks:8000/health" >/dev/null 2>&1; then
-    claude mcp add -s user --transport http ralph-tasks "http://ai-sbx-ralph-tasks:8000/mcp"
+# Use 'docker' hostname (DinD mapped ports) — container names are not resolvable from devcontainer
+if curl -sf --max-time 3 "http://docker:8000/health" >/dev/null 2>&1; then
+    claude mcp add -s user --transport http ralph-tasks "http://docker:8000/mcp"
 else
     claude mcp add -s user ralph-tasks -- ralph-tasks serve
 fi

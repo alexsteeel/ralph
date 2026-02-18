@@ -81,6 +81,7 @@ class GlobalConfig(BaseModel):
     user_uid: int = 1001
     default_ide: IDE = IDE.VSCODE
     default_base_image: BaseImage = Field(default=BaseImage.BASE)
+
     docker: DockerConfig = Field(default_factory=DockerConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
     templates_dir: Path | None = None
