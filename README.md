@@ -80,12 +80,14 @@ uv run ralph-tasks serve
 
 ## Docker
 
-Packages are installed in devcontainers from the monorepo:
+Packages are installed in devcontainers via local COPY from the monorepo root (build context):
 
 ```dockerfile
-RUN uv pip install --system --break-system-packages --no-cache \
-    "ralph-tasks @ git+https://github.com/alexsteeel/ralph.git#subdirectory=tasks"
+COPY tasks/ /tmp/ralph-tasks/
+RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-tasks/ \
+    && rm -rf /tmp/ralph-tasks/
 
-RUN uv pip install --system --break-system-packages --no-cache \
-    "ralph-cli @ git+https://github.com/alexsteeel/ralph.git#subdirectory=ralph-cli"
+COPY ralph-cli/ /tmp/ralph-cli/
+RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-cli/ \
+    && rm -rf /tmp/ralph-cli/
 ```
