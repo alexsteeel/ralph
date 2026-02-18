@@ -11,7 +11,7 @@ x-devcontainer-proxy-env: &devcontainer-proxy-env
 services:
   # Docker-in-Docker service
   docker:
-    image: ai-agents-sandbox/docker-dind:${IMAGE_TAG:-1.0.0}
+    image: ai-agents-sandbox/docker-dind:${IMAGE_TAG:-2.0.0}
     privileged: true  # Required for DinD
     restart: unless-stopped
     environment:
@@ -56,7 +56,7 @@ services:
 
   # Main proxy for devcontainer - supports upstream proxy
   tinyproxy-devcontainer:
-    image: ai-agents-sandbox/tinyproxy:${IMAGE_TAG:-1.0.0}
+    image: ai-agents-sandbox/tinyproxy:${IMAGE_TAG:-2.0.0}
     restart: unless-stopped
     environment:
       # Simplified upstream proxy configuration
