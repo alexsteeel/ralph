@@ -5,7 +5,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, Template
 
-from ralph_sandbox.config import BaseImage, ProjectConfig, get_default_whitelist_domains
+from ralph_sandbox.config import DEFAULT_IMAGE_TAG, BaseImage, ProjectConfig, get_default_whitelist_domains
 from ralph_sandbox.utils import logger
 
 
@@ -157,11 +157,11 @@ services:"""
     image: {custom_dind_image}
 
   tinyproxy-devcontainer:
-    image: ai-agents-sandbox/tinyproxy:1.0.0"""
+    image: ai-agents-sandbox/tinyproxy:{DEFAULT_IMAGE_TAG}"""
         else:
-            base_content += """
+            base_content += f"""
   tinyproxy-devcontainer:
-    image: ai-agents-sandbox/tinyproxy:1.0.0"""
+    image: ai-agents-sandbox/tinyproxy:{DEFAULT_IMAGE_TAG}"""
 
         # Add proxy configuration if present
         if config.proxy and config.proxy.enabled:

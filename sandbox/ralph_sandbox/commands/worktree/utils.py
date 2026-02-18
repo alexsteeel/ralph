@@ -209,7 +209,9 @@ def open_ide(worktree_path: Path, ide: IDE, console: Console, verbose: bool = Fa
         from ralph_sandbox.utils import check_docker_images, prompt_build_images
 
         # Get the image tag from environment or use default
-        image_tag = os.environ.get("IMAGE_TAG", "1.0.0")
+        from ralph_sandbox.config import DEFAULT_IMAGE_TAG
+
+        image_tag = os.environ.get("IMAGE_TAG", DEFAULT_IMAGE_TAG)
         required_images = [
             f"ai-agents-sandbox/devcontainer:{image_tag}",
             f"ai-agents-sandbox/tinyproxy:{image_tag}",

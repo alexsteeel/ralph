@@ -43,13 +43,17 @@ class ProxyConfig(BaseModel):
         return v
 
 
+# Single source of truth for default image tag across all modules and templates.
+DEFAULT_IMAGE_TAG = "2.0.0"
+
+
 class DockerConfig(BaseModel):
     """Docker configuration."""
 
     registry_proxy: bool = True
     custom_registries: list[str] = Field(default_factory=list)
     image_prefix: str = "ai-agents-sandbox"
-    image_tag: str = "1.0.0"  # Default version for stability
+    image_tag: str = DEFAULT_IMAGE_TAG
     build_args: dict[str, str] = Field(default_factory=dict)
 
 

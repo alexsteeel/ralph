@@ -11,6 +11,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from ralph_sandbox.config import (
+    DEFAULT_IMAGE_TAG,
     IDE,
     BaseImage,
     GlobalConfig,
@@ -258,7 +259,7 @@ def init_global(
         "ai-agents-sandbox/devcontainer",
     ]
 
-    missing_images = [img for img in required_images if not _image_exists(img, "1.0.0")]
+    missing_images = [img for img in required_images if not _image_exists(img, DEFAULT_IMAGE_TAG)]
 
     if missing_images:
         console.print(f"[yellow]Found {len(missing_images)} missing images. Building...[/yellow]")
@@ -603,7 +604,7 @@ def init_project(
         # Apply docker settings from template
         if "docker" in template_data:
             docker_data = template_data["docker"]
-            config.docker.image_tag = docker_data.get("image_tag", "1.0.0")
+            config.docker.image_tag = docker_data.get("image_tag", DEFAULT_IMAGE_TAG)
             config.docker.custom_registries = docker_data.get("custom_registries", [])
 
         # Apply environment variables from template

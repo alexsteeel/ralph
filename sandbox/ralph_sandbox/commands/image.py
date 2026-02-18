@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from ralph_sandbox.config import DEFAULT_IMAGE_TAG
 from ralph_sandbox.utils import AliasedGroup, is_docker_running, logger
 
 # Required images for AI Agents Sandbox
@@ -47,7 +48,7 @@ def image() -> None:
 @click.option("--all", is_flag=True, help="Build all images including optional environments")
 @click.option("--force", is_flag=True, help="Force rebuild even if images exist")
 @click.option("--no-cache", is_flag=True, help="Build without using Docker cache")
-@click.option("--tag", default="1.0.0", help="Tag for the images (default: 1.0.0)")
+@click.option("--tag", default=DEFAULT_IMAGE_TAG, help=f"Tag for the images (default: {DEFAULT_IMAGE_TAG})")
 @click.option("--show-logs", is_flag=True, help="Show Docker build output")
 @click.pass_context
 def build(
@@ -59,7 +60,7 @@ def build(
 
     \b
     Examples:
-        ai-sbx image build               # Build required images with tag 1.0.0
+        ai-sbx image build               # Build required images
         ai-sbx image build --tag 1.0.3  # Build with custom tag
         ai-sbx image build --all        # Build all images
         ai-sbx image build --force      # Force rebuild
@@ -186,8 +187,7 @@ def list_images(ctx: click.Context) -> None:
     table.add_column("Status", style="green")
 
     for image_name in REQUIRED_IMAGES:
-        # Check for 1.0.0 tag
-        if _image_exists(image_name, "1.0.0"):
+        if _image_exists(image_name, DEFAULT_IMAGE_TAG):
             status = "✓ Installed"
             style = "green"
         else:
@@ -196,14 +196,14 @@ def list_images(ctx: click.Context) -> None:
 
         table.add_row(
             image_name.replace("ai-agents-sandbox/", ""),
-            "1.0.0",
+            DEFAULT_IMAGE_TAG,
             f"[{style}]{status}[/{style}]",
         )
 
     console.print(table)
 
     # Check if any required images are missing
-    missing_required = [img for img in REQUIRED_IMAGES if not _image_exists(img, "1.0.0")]
+    missing_required = [img for img in REQUIRED_IMAGES if not _image_exists(img, DEFAULT_IMAGE_TAG)]
 
     if missing_required:
         console.print("\n[yellow]Some required images are missing.[/yellow]")
@@ -222,10 +222,10 @@ def verify(ctx: click.Context) -> None:
 
     all_ok = True
     for image_name in REQUIRED_IMAGES:
-        if _image_exists(image_name, "1.0.0"):
-            console.print(f"[green]✓[/green] {image_name}")
+        if _image_exists(image_name, DEFAULT_IMAGE_TAG):
+            console.print(f"[green]✓[/green] {image_name}:{DEFAULT_IMAGE_TAG}")
         else:
-            console.print(f"[red]✗[/red] {image_name} - missing")
+            console.print(f"[red]✗[/red] {image_name}:{DEFAULT_IMAGE_TAG} - missing")
             all_ok = False
 
     if all_ok:
