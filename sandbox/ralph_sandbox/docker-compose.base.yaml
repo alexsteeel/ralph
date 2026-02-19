@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
     networks:
       ai-sbx-internal:
-        ipv4_address: ${DNS_PROXY_IP:-172.28.0.53}  # Static IP for DNS (port 53 reference)
+        ipv4_address: ${DNS_PROXY_IP:-10.28.0.53}  # Static IP for DNS (port 53 reference)
       ai-sbx-external:
 
   # Main proxy for devcontainer - supports upstream proxy
@@ -77,7 +77,7 @@ services:
     # Use internal DNS proxy for name resolution
     # This allows DNS to work while keeping container on internal network only
     dns:
-      - ${DNS_PROXY_IP:-172.28.0.53}
+      - ${DNS_PROXY_IP:-10.28.0.53}
     environment:
       <<: *devcontainer-proxy-env
       # Project-specific environment
@@ -121,6 +121,7 @@ services:
     working_dir: /workspace
     networks:
       - ai-sbx-internal  # Internal network only - no direct internet access
+      - ai-sbx-proxy-internal  # Access to shared infra (ralph-tasks, neo4j, minio)
     depends_on:
       - docker  # For Docker CLI access
       - tinyproxy-devcontainer  # HTTP/HTTPS proxy
@@ -156,7 +157,7 @@ networks:
     internal: true  # Critical: blocks direct internet access
     ipam:
       config:
-        - subnet: ${NETWORK_SUBNET:-172.28.0.0/16}
+        - subnet: ${NETWORK_SUBNET:-10.28.0.0/24}
   ai-sbx-external:
     name: ${PROJECT_NAME:-project}-ai-sbx-external
     driver: bridge

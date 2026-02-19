@@ -13,26 +13,28 @@ def generate_unique_subnet(project_name: str) -> tuple[str, str]:
     """Generate a unique subnet and DNS IP based on project name.
 
     Uses a hash of the project name to generate a deterministic subnet
-    in the 172.16-31.x.0/24 range to avoid conflicts with other worktrees.
+    in the 10.x.y.0/24 range.  The 172.16-31.0.0 range is avoided because
+    Docker's default address pool auto-assigns /16 blocks there, which
+    overlap with any /24 we create.
 
     Args:
         project_name: The project name to hash
 
     Returns:
-        Tuple of (subnet, dns_ip) e.g. ("172.18.42.0/24", "172.18.42.53")
+        Tuple of (subnet, dns_ip) e.g. ("10.42.77.0/24", "10.42.77.53")
     """
     # Create a hash of the project name
     hash_bytes = hashlib.md5(project_name.encode()).digest()
 
-    # Use first two bytes for second and third octet
-    # Second octet: 16-31 (16 values) to stay in private 172.16.0.0/12 range
-    second_octet = 16 + (hash_bytes[0] % 16)
-    # Third octet: 0-255
-    third_octet = hash_bytes[1]
+    # Use first two bytes for second and third octet within 10.0.0.0/8
+    # Second octet: 1-254 (avoid 0 and 255)
+    second_octet = 1 + (hash_bytes[0] % 254)
+    # Third octet: 1-254
+    third_octet = 1 + (hash_bytes[1] % 254)
 
-    # Total unique subnets: 16 * 256 = 4096 different /24 subnets
-    subnet = f"172.{second_octet}.{third_octet}.0/24"
-    dns_ip = f"172.{second_octet}.{third_octet}.53"
+    # Total unique subnets: 254 * 254 = 64516 different /24 subnets
+    subnet = f"10.{second_octet}.{third_octet}.0/24"
+    dns_ip = f"10.{second_octet}.{third_octet}.53"
 
     return subnet, dns_ip
 
