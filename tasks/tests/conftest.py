@@ -13,7 +13,7 @@ import pytest
 # Outside devcontainer (CI, local), it's typically 'localhost'.
 _NEO4J_TEST_USER = "neo4j"
 _NEO4J_TEST_PASSWORD = "testpassword123"
-_NEO4J_CANDIDATE_URIS = ["bolt://docker:7687", "bolt://localhost:7687"]
+_NEO4J_CANDIDATE_URIS = ["bolt://ai-sbx-neo4j:7687", "bolt://docker:7687", "bolt://localhost:7687"]
 
 
 def _get_test_auth() -> tuple[str, str]:
@@ -61,7 +61,7 @@ def _get_neo4j_uri() -> str | None:
 
 _MINIO_TEST_ACCESS_KEY = "minioadmin"
 _MINIO_TEST_SECRET_KEY = "minioadmin"
-_MINIO_CANDIDATE_ENDPOINTS = ["docker:59000", "localhost:59000", "localhost:19000"]
+_MINIO_CANDIDATE_ENDPOINTS = ["ai-sbx-minio:9000", "docker:59000", "localhost:59000", "localhost:19000"]
 
 
 def _get_minio_test_auth() -> tuple[str, str]:

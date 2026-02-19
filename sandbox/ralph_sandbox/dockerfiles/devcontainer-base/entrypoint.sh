@@ -183,12 +183,12 @@ if command -v claude &> /dev/null; then
     if echo "$MCP_LIST" | grep -q "ralph-tasks"; then
         true  # already configured
     else
-        RALPH_TASKS_URL="http://docker:8000/mcp"
-        if curl -sf --max-time 3 "http://docker:8000/health" >/dev/null 2>&1; then
+        RALPH_TASKS_URL="http://ai-sbx-ralph-tasks:8000/mcp"
+        if curl -sf --max-time 3 "http://ai-sbx-ralph-tasks:8000/health" >/dev/null 2>&1; then
             claude mcp add -s user --transport http ralph-tasks "$RALPH_TASKS_URL" 2>/dev/null && \
-                echo "Added ralph-tasks MCP server (streamable-http via docker:8000)" || true
+                echo "Added ralph-tasks MCP server (streamable-http via ai-sbx-ralph-tasks:8000)" || true
         else
-            echo "Warning: ralph-tasks container not reachable at docker:8000, falling back to local stdio"
+            echo "Warning: ralph-tasks container not reachable, falling back to local stdio"
             claude mcp add -s user ralph-tasks -- ralph-tasks serve 2>/dev/null && \
                 echo "Added ralph-tasks MCP server (stdio fallback)" || true
         fi

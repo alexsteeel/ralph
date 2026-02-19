@@ -91,17 +91,20 @@ uv run ruff format --check .
 
 ### Devcontainer networking
 
-Devcontainer uses Docker-in-Docker (DinD). The DinD service is named `docker` in docker-compose. Containers started via `docker run` inside devcontainer run inside DinD. Their mapped ports are accessible from devcontainer by hostname `docker`:
+Devcontainer uses Docker-in-Docker (DinD). The DinD service is named `docker` in docker-compose. Containers started via `docker run` inside devcontainer run inside DinD. Their mapped ports are accessible from devcontainer by hostname `docker`.
+
+Shared infrastructure services (Neo4j, MinIO, ralph-tasks) run on the host Docker in the `ai-sbx-proxy-internal` network. Devcontainer is also connected to this network and reaches them by container name:
 
 ```
-bolt://docker:7687    # Neo4j Bolt
-http://docker:7474    # Neo4j HTTP
-http://docker:59000   # MinIO S3 API
-http://docker:59001   # MinIO Console
-http://docker:<port>  # Any container port mapped with -p
+bolt://ai-sbx-neo4j:7687       # Neo4j Bolt
+http://ai-sbx-neo4j:7474       # Neo4j HTTP
+http://ai-sbx-minio:9000       # MinIO S3 API (internal port)
+http://ai-sbx-minio:9001       # MinIO Console (internal port)
+http://ai-sbx-ralph-tasks:8000 # ralph-tasks web UI + MCP
+docker:<port>                   # DinD mapped ports (containers started inside devcontainer)
 ```
 
-Direct access to Docker bridge IPs (172.17.x.x) is blocked by tinyproxy. Always use `docker:<port>`.
+Direct access to Docker bridge IPs (172.17.x.x) is blocked by tinyproxy. Use container names for shared infra, `docker:<port>` for DinD.
 
 ### Docker
 
@@ -123,18 +126,19 @@ The `ai-sbx image build` command uses the monorepo root as Docker build context,
 
 The ralph-tasks MCP server runs as a shared Docker container (`ai-sbx-ralph-tasks`) serving both the Kanban web UI and MCP endpoint on port 8000:
 
-- `http://docker:8000/` — Kanban web UI (from devcontainer, via DinD mapped port)
-- `http://docker:8000/mcp` — MCP endpoint (streamable-http)
-- `http://docker:8000/health` — Docker HEALTHCHECK
+- `http://ai-sbx-ralph-tasks:8000/` — Kanban web UI (from devcontainer via `ai-sbx-proxy-internal` network)
+- `http://ai-sbx-ralph-tasks:8000/mcp` — MCP endpoint (streamable-http)
+- `http://ai-sbx-ralph-tasks:8000/health` — Docker HEALTHCHECK
+- `http://localhost:58000/` — Kanban web UI (from host, via port mapping)
 
 Build: `docker build -f tasks/Dockerfile .` (from monorepo root).
 
 MCP server registration in `entrypoint.sh` (with health check fallback):
 ```bash
 # Prefer streamable-http if container is running, fallback to local stdio
-# Use 'docker' hostname (DinD mapped ports) — container names are not resolvable from devcontainer
-if curl -sf --max-time 3 "http://docker:8000/health" >/dev/null 2>&1; then
-    claude mcp add -s user --transport http ralph-tasks "http://docker:8000/mcp"
+# Devcontainer reaches ralph-tasks via ai-sbx-proxy-internal network
+if curl -sf --max-time 3 "http://ai-sbx-ralph-tasks:8000/health" >/dev/null 2>&1; then
+    claude mcp add -s user --transport http ralph-tasks "http://ai-sbx-ralph-tasks:8000/mcp"
 else
     claude mcp add -s user ralph-tasks -- ralph-tasks serve
 fi
@@ -176,12 +180,12 @@ Use `--import-mode=importlib` in pytest config to avoid name collisions between 
 
 ### Neo4j tests: auto-skip when unavailable
 
-Neo4j tests use `@pytest.mark.neo4j` marker and auto-skip when the database is unreachable. The test conftest tries `bolt://docker:7687` first (devcontainer DinD), then `bolt://localhost:7687`. Override via `NEO4J_TEST_URI` env var. Test credentials: `NEO4J_TEST_USER`/`NEO4J_TEST_PASSWORD` (defaults: `neo4j`/`testpassword123`).
+Neo4j tests use `@pytest.mark.neo4j` marker and auto-skip when the database is unreachable. The test conftest tries `bolt://ai-sbx-neo4j:7687` first (devcontainer via proxy-internal network), then `bolt://docker:7687`, then `bolt://localhost:7687`. Override via `NEO4J_TEST_URI` env var. Test credentials: `NEO4J_TEST_USER`/`NEO4J_TEST_PASSWORD` (defaults: `neo4j`/`testpassword123`).
 
 ### MinIO attachment storage
 
 Task attachments are stored in MinIO (S3-compatible object storage). Configuration via environment variables:
-- `MINIO_ENDPOINT` (default: `localhost:9000`, devcontainer: `docker:59000`)
+- `MINIO_ENDPOINT` (default: `localhost:9000`, devcontainer: `ai-sbx-minio:9000`)
 - `MINIO_ACCESS_KEY` (default: `minioadmin`)
 - `MINIO_SECRET_KEY` (default: `minioadmin`)
 - `MINIO_BUCKET` (default: `ralph-tasks`)
@@ -191,7 +195,7 @@ Object keys follow the pattern `{project}/{NNN}/{filename}`. The storage module 
 
 ### MinIO tests: auto-skip when unavailable
 
-MinIO tests use `@pytest.mark.minio` marker and auto-skip when MinIO is unreachable. The test conftest tries `docker:59000` first (devcontainer DinD), then `localhost:59000`, then `localhost:19000` (test docker-compose). Override via `MINIO_TEST_ENDPOINT` env var. Test credentials: `MINIO_TEST_ACCESS_KEY`/`MINIO_TEST_SECRET_KEY` (defaults: `minioadmin`/`minioadmin`).
+MinIO tests use `@pytest.mark.minio` marker and auto-skip when MinIO is unreachable. The test conftest tries `ai-sbx-minio:9000` first (devcontainer via proxy-internal network), then `docker:59000`, then `localhost:59000`, then `localhost:19000` (test docker-compose). Override via `MINIO_TEST_ENDPOINT` env var. Test credentials: `MINIO_TEST_ACCESS_KEY`/`MINIO_TEST_SECRET_KEY` (defaults: `minioadmin`/`minioadmin`).
 
 ### `ralph review` inside nested Claude Code sessions
 

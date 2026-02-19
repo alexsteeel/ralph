@@ -120,6 +120,7 @@ services:
     working_dir: /workspace
     networks:
       - ai-sbx-internal  # Internal network only - no direct internet access
+      - ai-sbx-proxy-internal  # Access to shared infra (ralph-tasks, neo4j, minio)
     depends_on:
       - docker  # For Docker CLI access
       - tinyproxy-devcontainer  # HTTP/HTTPS proxy
