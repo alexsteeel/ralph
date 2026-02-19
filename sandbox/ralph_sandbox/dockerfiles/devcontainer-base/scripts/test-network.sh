@@ -23,7 +23,7 @@ test_domain_access() {
     # curl should use HTTP_PROXY/HTTPS_PROXY from environment  
     if [[ -n "${HTTP_PROXY:-}" ]]; then
         # Get HTTP status code directly from curl
-        http_code=$(curl --max-time 5 -ILs -o /dev/null -w '%{http_code}' "$domain" 2>/dev/null || echo "000")
+        http_code=$(curl --max-time 5 -Is -o /dev/null -w '%{http_code}' "$domain" 2>/dev/null || echo "000")
         
         # If we get 000 (or 000000), check if it's a 403 Filtered response from proxy
         if [[ "$http_code" =~ ^0+$ ]]; then
