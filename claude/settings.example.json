@@ -77,17 +77,6 @@
         ]
       }
     ],
-    "SubagentStop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/notify.sh complete 'Agent task completed'"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
