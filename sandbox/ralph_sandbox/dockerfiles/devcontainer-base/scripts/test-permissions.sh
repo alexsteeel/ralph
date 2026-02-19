@@ -171,37 +171,6 @@ check_home_directory() {
     done
 }
 
-# Function to check Docker socket access
-check_docker_access() {
-    echo ""
-    echo "=== Docker Access Check ==="
-    
-    # Check if Docker environment variables are set
-    if [[ -n "${DOCKER_HOST:-}" ]]; then
-        echo -e "${GREEN}✓${NC} DOCKER_HOST is set: $DOCKER_HOST"
-        ((TESTS_PASSED++))
-    else
-        echo -e "${YELLOW}⚠${NC} DOCKER_HOST is not set"
-    fi
-    
-    # Check if docker command is available
-    if command -v docker >/dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} Docker command is available"
-        ((TESTS_PASSED++))
-        
-        # Try to connect to Docker daemon
-        if docker version >/dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} Can connect to Docker daemon"
-            ((TESTS_PASSED++))
-        else
-            echo -e "${YELLOW}⚠${NC} Cannot connect to Docker daemon"
-        fi
-    else
-        echo -e "${RED}✗${NC} Docker command not found"
-        ((TESTS_FAILED++))
-    fi
-}
-
 # Main test execution
 main() {
     echo "========================================"
@@ -209,11 +178,10 @@ main() {
     echo "========================================"
     echo "Date: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
     echo ""
-    
+
     # Run tests
     check_workspace_permissions
     check_home_directory
-    check_docker_access
     
     # Summary
     echo ""

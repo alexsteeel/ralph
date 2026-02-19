@@ -145,12 +145,25 @@ check_container_tools() {
         echo -e "${GRAY}○${NC} docker-compose: not installed (optional)"
     fi
     
-    # Check if Docker daemon is accessible
-    if docker version >/dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} Docker daemon: accessible"
-        ((TESTS_PASSED++))
-    else
-        echo -e "${YELLOW}⚠${NC} Docker daemon: not accessible"
+    # Check if Docker daemon is accessible (DinD may still be starting)
+    local max_attempts=30
+    local attempt=1
+    while [ $attempt -le $max_attempts ]; do
+        if docker version >/dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} Docker daemon: accessible"
+            ((TESTS_PASSED++))
+            break
+        fi
+        if [ $attempt -eq 1 ]; then
+            echo -n "  Waiting for Docker daemon..."
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    if [ $attempt -gt $max_attempts ]; then
+        echo ""
+        echo -e "${RED}✗${NC} Docker daemon: not accessible after ${max_attempts}s"
+        ((TESTS_FAILED++))
     fi
 }
 
