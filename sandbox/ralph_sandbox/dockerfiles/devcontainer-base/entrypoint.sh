@@ -179,7 +179,7 @@ if command -v claude &> /dev/null; then
 
     # Add ralph-tasks MCP server if not already configured
     # Prefer network (streamable-http) if container is running, fallback to local stdio
-    # Use 'docker' hostname (DinD mapped ports) — container names are not resolvable from devcontainer
+    # Container names are resolvable via ai-sbx-proxy-internal network (requires NO_PROXY bypass)
     if echo "$MCP_LIST" | grep -q "ralph-tasks"; then
         true  # already configured
     else
