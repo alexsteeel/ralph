@@ -1423,6 +1423,9 @@ COMPOSE_PROJECT_NAME={path.name}
 # Network configuration (unique per worktree to avoid conflicts)
 NETWORK_SUBNET={subnet}
 DNS_PROXY_IP={dns_ip}
+
+# Docker image version
+IMAGE_TAG={DEFAULT_IMAGE_TAG}
 """
         env_file.write_text(env_content)
         console.print("[green]✓[/green] Created .env file")
@@ -1452,7 +1455,19 @@ DNS_PROXY_IP={dns_ip}
                 with open(override_file) as f:
                     override_config = yaml.safe_load(f) or {}
             else:
-                override_config = {}
+                # Bootstrap override with build context so devcontainer
+                # service has an image source (docker-compose.base.yaml
+                # defines the service without image/build).
+                override_config = {
+                    "services": {
+                        "devcontainer": {
+                            "build": {
+                                "context": ".",
+                                "dockerfile": "Dockerfile",
+                            }
+                        }
+                    }
+                }
 
             # Ensure structure exists
             if "services" not in override_config:
