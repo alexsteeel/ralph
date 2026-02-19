@@ -222,12 +222,25 @@ def list_tasks(session: Session, project_name: str) -> list[dict]:
     result = session.run(
         """
         MATCH (p:Project {name: $project})-[:HAS_TASK]->(t:Task)
-        RETURN t {.*} AS task
+        OPTIONAL MATCH (t)-[:HAS_SECTION]->(s:Section)
+        OPTIONAL MATCH (t)-[:DEPENDS_ON]->(dep:Task)
+        WITH t,
+             collect(DISTINCT {type: s.type, content: s.content}) AS sections,
+             collect(DISTINCT dep.number) AS deps
+        RETURN t {.*} AS task, sections, deps
         ORDER BY t.number
         """,
         project=project_name,
     )
-    return [dict(r["task"]) for r in result]
+    tasks = []
+    for r in result:
+        task_dict = dict(r["task"])
+        for sec in r["sections"]:
+            if sec["type"] is not None:
+                task_dict[f"section_{sec['type']}"] = sec["content"] or ""
+        task_dict["depends_on"] = sorted([d for d in r["deps"] if d is not None])
+        tasks.append(task_dict)
+    return tasks
 
 
 def update_task(
