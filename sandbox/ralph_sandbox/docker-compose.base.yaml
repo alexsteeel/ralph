@@ -115,9 +115,6 @@ services:
       
       # IDE cache for JetBrains
       - jb-cache:/.jbdevcontainer
-    ports:
-      # OpenAI Codex auth port
-      - "${CODEX_PORT:-1455}:1455"
     working_dir: /workspace
     networks:
       - ai-sbx-internal  # Internal network only - no direct internet access
