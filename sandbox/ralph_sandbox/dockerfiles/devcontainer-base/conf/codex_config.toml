@@ -1,7 +1,7 @@
 profile = "default"
 
 [profiles.default]
-model = "gpt-5.2-codex"
+model = "gpt-5.3-codex"
 model_provider = "openai"
 model_reasoning_effort = "xhigh"
 
@@ -11,13 +11,12 @@ model_provider = "openai"
 model_reasoning_effort = "high"
 
 [profiles.gpt-5-codex]
-model = "gpt-5.2-codex"
+model = "gpt-5.3-codex"
 model_provider = "openai"
 model_reasoning_effort = "medium"
 
 [mcp_servers.ralph-tasks]
-command = "ralph-tasks"
-args = ["serve"]
+url = "http://ai-sbx-ralph-tasks:8000/mcp"
 
 [mcp_servers.playwright]
 command = "playwright-mcp"
