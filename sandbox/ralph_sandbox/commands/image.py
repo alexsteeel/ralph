@@ -48,7 +48,7 @@ def image() -> None:
 @click.option("--all", is_flag=True, help="Build all images including optional environments")
 @click.option("--force", is_flag=True, help="Force rebuild even if images exist")
 @click.option("--no-cache", is_flag=True, help="Build without using Docker cache")
-@click.option("--tag", default=DEFAULT_IMAGE_TAG, help=f"Tag for the images (default: {DEFAULT_IMAGE_TAG})")
+@click.option("--tag", default=DEFAULT_IMAGE_TAG, help=f"Image tag (default: {DEFAULT_IMAGE_TAG})")
 @click.option("--show-logs", is_flag=True, help="Show Docker build output")
 @click.pass_context
 def build(
@@ -172,8 +172,9 @@ def build(
 
 
 @image.command(name="list")
+@click.option("--tag", default=DEFAULT_IMAGE_TAG, help=f"Image tag (default: {DEFAULT_IMAGE_TAG})")
 @click.pass_context
-def list_images(ctx: click.Context) -> None:
+def list_images(ctx: click.Context, tag: str) -> None:
     """List AI Agents Sandbox Docker images and their status."""
     console: Console = ctx.obj["console"]
 
@@ -186,33 +187,33 @@ def list_images(ctx: click.Context) -> None:
     table.add_column("Tag", style="magenta")
     table.add_column("Status", style="green")
 
+    has_missing = False
     for image_name in REQUIRED_IMAGES:
-        if _image_exists(image_name, DEFAULT_IMAGE_TAG):
+        if _image_exists(image_name, tag):
             status = "✓ Installed"
             style = "green"
         else:
             status = "✗ Not found"
             style = "red"
+            has_missing = True
 
         table.add_row(
             image_name.replace("ai-agents-sandbox/", ""),
-            DEFAULT_IMAGE_TAG,
+            tag,
             f"[{style}]{status}[/{style}]",
         )
 
     console.print(table)
 
-    # Check if any required images are missing
-    missing_required = [img for img in REQUIRED_IMAGES if not _image_exists(img, DEFAULT_IMAGE_TAG)]
-
-    if missing_required:
+    if has_missing:
         console.print("\n[yellow]Some required images are missing.[/yellow]")
         console.print("Run: [cyan]ai-sbx image build[/cyan]")
 
 
 @image.command()
+@click.option("--tag", default=DEFAULT_IMAGE_TAG, help=f"Image tag (default: {DEFAULT_IMAGE_TAG})")
 @click.pass_context
-def verify(ctx: click.Context) -> None:
+def verify(ctx: click.Context, tag: str) -> None:
     """Verify that all required images are installed."""
     console: Console = ctx.obj["console"]
 
@@ -222,10 +223,10 @@ def verify(ctx: click.Context) -> None:
 
     all_ok = True
     for image_name in REQUIRED_IMAGES:
-        if _image_exists(image_name, DEFAULT_IMAGE_TAG):
-            console.print(f"[green]✓[/green] {image_name}:{DEFAULT_IMAGE_TAG}")
+        if _image_exists(image_name, tag):
+            console.print(f"[green]✓[/green] {image_name}:{tag}")
         else:
-            console.print(f"[red]✗[/red] {image_name}:{DEFAULT_IMAGE_TAG} - missing")
+            console.print(f"[red]✗[/red] {image_name}:{tag} - missing")
             all_ok = False
 
     if all_ok:

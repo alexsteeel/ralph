@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from click.testing import CliRunner
 from ralph_sandbox.cli import cli
-from ralph_sandbox.commands.image import _find_monorepo_root
+from ralph_sandbox.commands.image import DEFAULT_IMAGE_TAG, REQUIRED_IMAGES, _find_monorepo_root
 
 
 class TestFindMonorepoRoot:
@@ -287,6 +287,48 @@ class TestImageListCommand:
         # Should show a table with images
         assert "Image" in result.output or "Status" in result.output
 
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_list_images_with_custom_tag(self, mock_docker, mock_image_exists):
+        """Test that --tag is passed to _image_exists and shown in output."""
+        mock_docker.return_value = True
+        mock_image_exists.return_value = True
+
+        result = self.runner.invoke(cli, ["image", "list", "--tag", "3.0.0"])
+
+        assert result.exit_code == 0
+        assert "3.0.0" in result.output
+        assert mock_image_exists.call_count == len(REQUIRED_IMAGES)
+        for call in mock_image_exists.call_args_list:
+            assert call[0][1] == "3.0.0"
+
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_list_images_default_tag(self, mock_docker, mock_image_exists):
+        """Test that without --tag, DEFAULT_IMAGE_TAG is used."""
+        mock_docker.return_value = True
+        mock_image_exists.return_value = True
+
+        result = self.runner.invoke(cli, ["image", "list"])
+
+        assert result.exit_code == 0
+        assert DEFAULT_IMAGE_TAG in result.output
+        for call in mock_image_exists.call_args_list:
+            assert call[0][1] == DEFAULT_IMAGE_TAG
+
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_list_images_with_missing_and_custom_tag(self, mock_docker, mock_image_exists):
+        """Test list output when some images are missing with custom tag."""
+        mock_docker.return_value = True
+        mock_image_exists.return_value = False
+
+        result = self.runner.invoke(cli, ["image", "list", "--tag", "3.0.0"])
+
+        assert result.exit_code == 0
+        assert "3.0.0" in result.output
+        assert "missing" in result.output.lower() or "Not found" in result.output
+
 
 class TestImageVerifyCommand:
     """Test image verify command."""
@@ -314,3 +356,32 @@ class TestImageVerifyCommand:
 
         assert result.exit_code != 0
         assert "Missing" in result.output or "missing" in result.output
+
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_verify_with_custom_tag(self, mock_docker, mock_exists):
+        """Test that --tag is passed to _image_exists and shown in output."""
+        mock_docker.return_value = True
+        mock_exists.return_value = True
+
+        result = self.runner.invoke(cli, ["image", "verify", "--tag", "3.0.0"])
+
+        assert result.exit_code == 0
+        assert "3.0.0" in result.output
+        assert mock_exists.call_count == len(REQUIRED_IMAGES)
+        for call in mock_exists.call_args_list:
+            assert call[0][1] == "3.0.0"
+
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_verify_default_tag(self, mock_docker, mock_exists):
+        """Test that without --tag, DEFAULT_IMAGE_TAG is used."""
+        mock_docker.return_value = True
+        mock_exists.return_value = True
+
+        result = self.runner.invoke(cli, ["image", "verify"])
+
+        assert result.exit_code == 0
+        assert DEFAULT_IMAGE_TAG in result.output
+        for call in mock_exists.call_args_list:
+            assert call[0][1] == DEFAULT_IMAGE_TAG

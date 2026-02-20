@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+- **sandbox: add --tag option to `image list` and `image verify` commands** (#26)
+  - `ai-sbx image list --tag X` and `ai-sbx image verify --tag X` now check images with the specified tag instead of always using the default
+  - Unified `--tag` help strings across `build`, `list`, and `verify` commands
+  - Eliminated redundant double `_image_exists` call in `list_images` (halved subprocess invocations)
+  - New tests: `test_list_images_with_custom_tag`, `test_list_images_default_tag`, `test_list_images_with_missing_and_custom_tag`, `test_verify_with_custom_tag`, `test_verify_default_tag`
+
 ### Added
 - **tasks: security hardening — API auth, upload limits, port binding** (#37)
   - `ApiKeyMiddleware` ASGI middleware protecting `/api/*` and `/mcp/*` with `RALPH_TASKS_API_KEY` env var
