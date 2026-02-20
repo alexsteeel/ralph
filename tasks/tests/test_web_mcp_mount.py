@@ -76,6 +76,28 @@ class TestWebRoutesUnchanged:
         assert response.status_code == 404
 
 
+class TestKanbanRedirect:
+    """Tests for project name normalization redirect in kanban."""
+
+    def test_underscore_redirects_to_hyphen(self, client):
+        """Kanban with underscore name should 301 redirect to hyphen."""
+        response = client.get("/kanban/my_project", follow_redirects=False)
+        assert response.status_code == 301
+        assert response.headers["location"] == "/kanban/my-project"
+
+    def test_canonical_name_no_redirect(self, client):
+        """Kanban with canonical name should render normally (no redirect)."""
+        with patch("ralph_tasks.web.list_tasks", return_value=[]):
+            response = client.get("/kanban/my-project")
+        assert response.status_code == 200
+
+    def test_redirect_preserves_query_params(self, client):
+        """301 redirect should preserve query parameters."""
+        response = client.get("/kanban/my_project?filter=todo", follow_redirects=False)
+        assert response.status_code == 301
+        assert response.headers["location"] == "/kanban/my-project?filter=todo"
+
+
 class TestGetMcpHttpApp:
     """Tests for mcp.get_mcp_http_app()."""
 

@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
@@ -24,6 +24,7 @@ from .core import (
     list_attachments,
     list_projects,
     list_tasks,
+    normalize_project_name,
     save_attachment,
     set_project_description,
 )
@@ -198,6 +199,12 @@ async def get_monthly_tasks(month: str):
 @app.get("/kanban/{name}", response_class=HTMLResponse)
 async def kanban_board(request: Request, name: str):
     """Display tasks as a kanban board."""
+    canonical = normalize_project_name(name)
+    if canonical != name:
+        redirect_url = f"/kanban/{canonical}"
+        if request.url.query:
+            redirect_url += f"?{request.url.query}"
+        return RedirectResponse(url=redirect_url, status_code=301)
     tasks = list_tasks(name)
     board = {
         status: sorted(
@@ -255,7 +262,7 @@ async def delete_task_endpoint(project: str, number: int):
 @app.post("/api/project")
 async def create_project_endpoint(data: ProjectCreate):
     """Create a new project."""
-    name = data.name.strip()
+    name = normalize_project_name(data.name)
     if not name:
         raise HTTPException(status_code=400, detail="Project name is required")
     _create_project(name, data.description or "")

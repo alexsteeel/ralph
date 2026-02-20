@@ -146,6 +146,24 @@ def list_projects(session: Session, parent_name: str) -> list[dict]:
     return [dict(r["project"]) for r in result]
 
 
+def rename_project(
+    session: Session, workspace_name: str, old_name: str, new_name: str
+) -> dict | None:
+    """Rename a project. Returns updated project dict or None if not found."""
+    result = session.run(
+        """
+        MATCH (w:Workspace {name: $ws})-[:CONTAINS_PROJECT]->(p:Project {name: $old_name})
+        SET p.name = $new_name
+        RETURN p {.*} AS project
+        """,
+        ws=workspace_name,
+        old_name=old_name,
+        new_name=new_name,
+    )
+    record = result.single()
+    return dict(record["project"]) if record else None
+
+
 # ---------------------------------------------------------------------------
 # Task
 # ---------------------------------------------------------------------------

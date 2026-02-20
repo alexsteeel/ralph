@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- **tasks: project name normalization — hyphens vs underscores** (#36)
+  - `normalize_project_name()` in `core.py` — canonical form uses hyphens (`face_recognition` → `face-recognition`)
+  - Applied to all 14 public functions in `core.py` (projects, tasks, attachments)
+  - Auto-migration at startup: renames existing underscore projects to canonical form
+  - `rename_project()` in `graph/crud.py` for Neo4j project renaming
+  - `migrate_project_prefix()` in `storage.py` for MinIO object key migration
+  - 301 redirect in `/kanban/{name}` for non-canonical URLs (preserves query params)
+  - Normalized project name in `create_project` web API response
+  - Consistent cache paths in MCP `read_attachment`
+  - New tests: 7 unit tests for `normalize_project_name`, 8 Neo4j integration tests, 3 migration tests, 3 web redirect tests
 - **tasks: containerize ralph-tasks MCP server** (#33)
   - Combined ASGI app: FastAPI web UI + FastMCP streamable-http on single port 8000
   - `get_mcp_http_app()` in `mcp.py` — returns Starlette app mounted at `/mcp`

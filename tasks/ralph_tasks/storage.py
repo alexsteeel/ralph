@@ -21,6 +21,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from minio import Minio
+from minio.commonconfig import CopySource
 from minio.error import S3Error
 
 logger = logging.getLogger("md-task-mcp.storage")
@@ -228,6 +229,37 @@ def object_exists(project: str, task_number: int, filename: str) -> bool:
         if e.code == "NoSuchKey":
             return False
         raise
+
+
+def migrate_project_prefix(old_project: str, new_project: str) -> int:
+    """Migrate all objects from old project prefix to new project prefix.
+
+    Copies objects to the new prefix and removes the old ones.
+    Returns the number of objects migrated.
+    """
+    client, bucket = _ready()
+
+    old_prefix = _sanitize_key_component(old_project) + "/"
+    new_prefix = _sanitize_key_component(new_project) + "/"
+
+    if old_prefix == new_prefix:
+        logger.warning(
+            f"MinIO prefix collision: '{old_project}' and '{new_project}' "
+            f"map to identical sanitized prefix '{old_prefix}'. Objects not migrated."
+        )
+        return 0
+
+    count = 0
+    for obj in client.list_objects(bucket, prefix=old_prefix, recursive=True):
+        old_key = obj.object_name
+        new_key = new_prefix + old_key[len(old_prefix) :]
+        client.copy_object(bucket, new_key, CopySource(bucket, old_key))
+        client.remove_object(bucket, old_key)
+        count += 1
+
+    if count:
+        logger.info(f"Migrated {count} objects: {old_prefix} -> {new_prefix}")
+    return count
 
 
 def get_presigned_url(

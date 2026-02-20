@@ -18,6 +18,7 @@ from starlette.applications import Starlette
 from .core import (
     copy_attachment,
     get_attachment_bytes,
+    normalize_project_name,
     project_exists,
 )
 from .core import (
@@ -272,8 +273,8 @@ def read_attachment(project: str, number: int, filename: str) -> dict:
     if content is None:
         raise ValueError(f"Attachment '{filename}' not found for task #{number}")
 
-    # Write to temp location (sanitize project name for filesystem path)
-    safe_project = "".join(c for c in project if c.isalnum() or c in "-_.")
+    # Write to temp location (use normalized name for consistent cache paths)
+    safe_project = "".join(c for c in normalize_project_name(project) if c.isalnum() or c in "-_")
     safe_name = Path(filename).name
     cache_dir = _ATTACHMENT_CACHE_DIR / safe_project / f"{number:03d}"
     cache_dir.mkdir(parents=True, exist_ok=True)

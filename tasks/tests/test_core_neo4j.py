@@ -1,7 +1,10 @@
 """Tests for core.py with Neo4j backend."""
 
+import logging
+
 import pytest
 from ralph_tasks import core
+from ralph_tasks.core import normalize_project_name
 from ralph_tasks.graph import crud
 from ralph_tasks.graph.schema import ensure_schema
 
@@ -269,3 +272,134 @@ class TestUpdatedAtSorting:
         task_after = core.get_task("proj", 1)
         # updated_at should be >= before (might be same if very fast)
         assert task_after.updated_at >= task_before.updated_at
+
+
+# ---------------------------------------------------------------------------
+# Project name normalization
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeProjectName:
+    """Unit tests for normalize_project_name (no Neo4j required)."""
+
+    def test_underscores_to_hyphens(self):
+        assert normalize_project_name("face_recognition") == "face-recognition"
+
+    def test_already_canonical(self):
+        assert normalize_project_name("already-canonical") == "already-canonical"
+
+    def test_strips_whitespace(self):
+        assert normalize_project_name("  spaces  ") == "spaces"
+
+    def test_mixed_separators(self):
+        assert (
+            normalize_project_name("mixed_dashes-and_underscores") == "mixed-dashes-and-underscores"
+        )
+
+    def test_empty_string(self):
+        assert normalize_project_name("") == ""
+
+    def test_only_underscores(self):
+        assert normalize_project_name("___") == "---"
+
+    def test_no_separators(self):
+        assert normalize_project_name("simple") == "simple"
+
+
+@pytest.mark.neo4j
+class TestNormalizationIntegration:
+    """Integration tests for project name normalization with Neo4j."""
+
+    def test_create_with_underscore_access_with_hyphen(self, graph_core):
+        """Creating a task with underscore should be accessible via hyphen."""
+        core.create_task("test_proj", "Task via underscore")
+        task = core.get_task("test-proj", 1)
+        assert task is not None
+        assert task.description == "Task via underscore"
+
+    def test_create_with_hyphen_access_with_underscore(self, graph_core):
+        """Creating a task with hyphen should be accessible via underscore."""
+        core.create_task("test-proj", "Task via hyphen")
+        task = core.get_task("test_proj", 1)
+        assert task is not None
+        assert task.description == "Task via hyphen"
+
+    def test_list_projects_returns_canonical(self, graph_core):
+        """list_projects should return canonical (hyphenated) names."""
+        core.create_project("my_project")
+        projects = core.list_projects()
+        assert "my-project" in projects
+        assert "my_project" not in projects
+
+    def test_list_tasks_with_underscore(self, graph_core):
+        """list_tasks should work with underscore variant."""
+        core.create_task("my-proj", "Task 1")
+        tasks = core.list_tasks("my_proj")
+        assert len(tasks) == 1
+        assert tasks[0].description == "Task 1"
+
+    def test_update_task_with_underscore(self, graph_core):
+        """update_task should work with underscore variant."""
+        core.create_task("my-proj", "Task")
+        updated = core.update_task("my_proj", 1, description="Updated")
+        assert updated.description == "Updated"
+
+    def test_delete_task_with_underscore(self, graph_core):
+        """delete_task should work with underscore variant."""
+        core.create_task("my-proj", "Task")
+        assert core.delete_task("my_proj", 1) is True
+        assert core.get_task("my-proj", 1) is None
+
+    def test_project_exists_with_underscore(self, graph_core):
+        """project_exists should resolve underscore to hyphen."""
+        core.create_project("my-proj")
+        assert core.project_exists("my_proj") is True
+
+    def test_no_duplicate_projects(self, graph_core):
+        """Creating project with both variants should not create duplicates."""
+        core.create_project("my_proj")
+        core.create_project("my-proj")  # should be a no-op
+        projects = core.list_projects()
+        assert projects.count("my-proj") == 1
+
+
+@pytest.mark.neo4j
+class TestProjectNameMigration:
+    """Tests for automatic project name migration at startup."""
+
+    def test_migration_renames_underscore_project(self, graph_core):
+        """Projects created with underscores via crud should be migrated."""
+        with graph_core.session() as session:
+            crud.create_project(session, core.DEFAULT_WORKSPACE, "old_project")
+
+        # Force re-migration
+        with graph_core.session() as session:
+            core._migrate_project_names(session)
+
+        # Should now exist under canonical name
+        assert core.project_exists("old-project") is True
+
+    def test_migration_skips_conflict(self, graph_core, caplog):
+        """Migration should skip when canonical name already exists."""
+        with graph_core.session() as session:
+            crud.create_project(session, core.DEFAULT_WORKSPACE, "conflict_proj")
+            crud.create_project(session, core.DEFAULT_WORKSPACE, "conflict-proj")
+
+        with caplog.at_level(logging.WARNING, logger="md-task-mcp"):
+            with graph_core.session() as session:
+                core._migrate_project_names(session)
+
+        assert "Manual merge required" in caplog.text
+        # Both should still exist
+        with graph_core.session() as session:
+            old = crud.get_project(session, core.DEFAULT_WORKSPACE, "conflict_proj")
+            new = crud.get_project(session, core.DEFAULT_WORKSPACE, "conflict-proj")
+            assert old is not None
+            assert new is not None
+
+    def test_migration_noop_for_canonical_names(self, graph_core):
+        """Migration should do nothing for already-canonical names."""
+        core.create_project("already-good")
+        with graph_core.session() as session:
+            core._migrate_project_names(session)
+        assert core.project_exists("already-good") is True

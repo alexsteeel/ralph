@@ -30,6 +30,16 @@ from ralph_tasks.graph.schema import ensure_schema
 
 # Constants
 BASE_DIR = Path.home() / ".md-task-mcp"
+
+
+def normalize_project_name(name: str) -> str:
+    """Normalize project name to canonical form (hyphens instead of underscores).
+
+    Strips whitespace and replaces underscores with hyphens.
+    """
+    return name.strip().replace("_", "-")
+
+
 LOG_FILE = Path("/tmp/md-task-mcp.log")
 DEFAULT_WORKSPACE = "default"
 VALID_STATUSES = {"todo", "work", "done", "approved", "hold"}
@@ -174,7 +184,47 @@ def _ensure_graph_ready() -> None:
             ws = crud.get_workspace(session, DEFAULT_WORKSPACE)
             if ws is None:
                 crud.create_workspace(session, DEFAULT_WORKSPACE)
+            _migrate_project_names(session)
         _schema_initialized = True
+
+
+def _migrate_project_names(session: Session) -> None:
+    """Rename projects with underscores to canonical hyphenated form.
+
+    Runs once at startup as part of _ensure_graph_ready().
+    Skips migration when the canonical name already exists (conflict).
+    MinIO prefix migration is best-effort.
+    """
+    projects = crud.list_projects(session, DEFAULT_WORKSPACE)
+    canonical_names = {p["name"] for p in projects}
+
+    for proj in projects:
+        name = proj["name"]
+        canonical = normalize_project_name(name)
+        if canonical == name:
+            continue
+
+        if canonical in canonical_names:
+            logger.warning(
+                f"Cannot migrate project '{name}' -> '{canonical}': "
+                "canonical name already exists. Manual merge required."
+            )
+            continue
+
+        # Migrate MinIO objects first — if this fails, Neo4j still has old name,
+        # so attachments remain accessible. Reverse order would orphan objects.
+        try:
+            storage.migrate_project_prefix(name, canonical)
+        except (S3Error, Urllib3HTTPError, OSError) as e:
+            logger.warning(f"MinIO migration failed for '{name}' -> '{canonical}': {e}")
+
+        result = crud.rename_project(session, DEFAULT_WORKSPACE, name, canonical)
+        if result is None:
+            logger.warning(f"Project '{name}' not found during migration, skipping")
+            continue
+        canonical_names.discard(name)
+        canonical_names.add(canonical)
+        logger.info(f"Migrated project name: '{name}' -> '{canonical}'")
 
 
 def reset_client() -> None:
@@ -237,6 +287,7 @@ def list_projects() -> list[str]:
 
 def create_project(name: str, description: str = "") -> None:
     """Create a project under the default workspace."""
+    name = normalize_project_name(name)
     with _session() as session:
         if crud.get_project(session, DEFAULT_WORKSPACE, name) is None:
             crud.create_project(session, DEFAULT_WORKSPACE, name, description)
@@ -244,12 +295,14 @@ def create_project(name: str, description: str = "") -> None:
 
 def project_exists(name: str) -> bool:
     """Check if a project exists."""
+    name = normalize_project_name(name)
     with _session() as session:
         return crud.get_project(session, DEFAULT_WORKSPACE, name) is not None
 
 
 def get_project_description(name: str) -> str:
     """Get project description."""
+    name = normalize_project_name(name)
     with _session() as session:
         proj = crud.get_project(session, DEFAULT_WORKSPACE, name)
         return proj["description"] if proj else ""
@@ -257,6 +310,7 @@ def get_project_description(name: str) -> str:
 
 def set_project_description(name: str, description: str) -> None:
     """Set project description (creates project if needed)."""
+    name = normalize_project_name(name)
     with _session() as session:
         proj = crud.get_project(session, DEFAULT_WORKSPACE, name)
         if proj is None:
@@ -289,6 +343,7 @@ def create_task(
 
     Returns the created Task with all fields populated.
     """
+    project = normalize_project_name(project)
     with _session() as session:
         # Ensure project exists
         if crud.get_project(session, DEFAULT_WORKSPACE, project) is None:
@@ -322,6 +377,7 @@ def create_task(
 
 def get_task(project: str, number: int) -> Task | None:
     """Get a task with all sections and dependencies."""
+    project = normalize_project_name(project)
     with _session() as session:
         full = crud.get_task_full(session, project, number)
         if full is None:
@@ -331,6 +387,7 @@ def get_task(project: str, number: int) -> Task | None:
 
 def list_tasks(project: str) -> list[Task]:
     """List all tasks for a project (summary, no section content)."""
+    project = normalize_project_name(project)
     with _session() as session:
         tasks = crud.list_tasks(session, project)
         return [_task_from_graph(t) for t in tasks]
@@ -341,6 +398,7 @@ def update_task(project: str, number: int, **fields: Any) -> Task:
 
     Raises ValueError if the task is not found.
     """
+    project = normalize_project_name(project)
     with _session() as session:
         # Verify task exists
         existing = crud.get_task(session, project, number)
@@ -399,6 +457,7 @@ def update_task(project: str, number: int, **fields: Any) -> Task:
 
 def delete_task(project: str, number: int) -> bool:
     """Delete a task and its attachments from Neo4j and MinIO."""
+    project = normalize_project_name(project)
     with _session() as session:
         deleted = crud.delete_task(session, project, number)
 
@@ -420,6 +479,7 @@ def delete_task(project: str, number: int) -> bool:
 
 def list_attachments(project: str, number: int) -> list[dict]:
     """List all attachments for a task from MinIO."""
+    project = normalize_project_name(project)
     return storage.list_objects(project, number)
 
 
@@ -428,6 +488,7 @@ def save_attachment(project: str, number: int, filename: str, content: bytes) ->
 
     Returns {"name": str, "size": int}.
     """
+    project = normalize_project_name(project)
     safe_filename = Path(filename).name
     if not safe_filename:
         raise ValueError("Invalid filename")
@@ -446,6 +507,7 @@ def copy_attachment(
 
     Returns {"name": str, "size": int}.
     """
+    project = normalize_project_name(project)
     source = Path(source_path)
     if not source.exists():
         raise FileNotFoundError(f"Source file not found: {source_path}")
@@ -462,6 +524,7 @@ def copy_attachment(
 
 def get_attachment_bytes(project: str, number: int, filename: str) -> bytes | None:
     """Get attachment content from MinIO. Returns None if not found."""
+    project = normalize_project_name(project)
     safe_filename = Path(filename).name
     if not safe_filename:
         return None
@@ -470,6 +533,7 @@ def get_attachment_bytes(project: str, number: int, filename: str) -> bytes | No
 
 def delete_attachment(project: str, number: int, filename: str) -> bool:
     """Delete an attachment from MinIO. Returns True if deleted."""
+    project = normalize_project_name(project)
     safe_filename = Path(filename).name
     if not safe_filename:
         return False
