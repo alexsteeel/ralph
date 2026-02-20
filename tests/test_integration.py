@@ -73,7 +73,7 @@ class TestCodexConfig:
     def test_uses_ralph_tasks_mcp(self):
         content = self.CONFIG.read_text()
         assert "[mcp_servers.ralph-tasks]" in content
-        assert 'command = "ralph-tasks"' in content
+        assert 'url = "http://ai-sbx-ralph-tasks:8000/mcp"' in content
 
     def test_no_old_md_task_mcp(self):
         content = self.CONFIG.read_text()
