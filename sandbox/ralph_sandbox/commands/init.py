@@ -1172,6 +1172,18 @@ def init_project(
         save_project_config(config)
         progress.update(task, description="[green]✓[/green] Configuration saved")
 
+        # Regenerate .env and docker-compose.override.yaml from the saved config.
+        # On first run generate_project_files() creates these, but with force=False
+        # a re-run skips them — leaving stale proxy/network values.
+        # This call ensures derived files always reflect the latest configuration.
+        task = progress.add_task("Updating derived configuration files...", total=None)
+        if _regenerate_derived_files(console, project_path, config, verbose):
+            progress.update(task, description="[green]✓[/green] Derived files updated")
+        else:
+            progress.update(
+                task, description="[yellow]⚠[/yellow] Could not update derived files"
+            )
+
         # Create init.secure.sh if requested
         if "create_secure_init" in locals() and create_secure_init:
             task = progress.add_task("Creating init.secure.sh...", total=None)
@@ -1795,10 +1807,59 @@ def run_worktree_init(console: Console, path: str, verbose: bool = False) -> Non
     project_setup_impl(console, project_path, skip_proxy=False, verbose=verbose)
 
 
-def run_update_env(console: Console, path: str, verbose: bool = False) -> None:
-    """Update .env file from ai-sbx.yaml configuration."""
-    from pathlib import Path
+def _regenerate_derived_files(
+    console: Console,
+    project_path: Path,
+    config: ProjectConfig,
+    verbose: bool = False,
+) -> bool:
+    """Regenerate .env and docker-compose.override.yaml from ProjectConfig.
 
+    Both files are derived from ai-sbx.yaml and may contain proxy settings,
+    network configuration, image tags, and custom environment variables.
+    This helper ensures they stay in sync when any configuration value changes.
+
+    Precondition: project_path / '.devcontainer' must already exist.
+
+    Returns:
+        True if both files were written successfully, False on error.
+    """
+    devcontainer_dir = project_path / ".devcontainer"
+    if not devcontainer_dir.is_dir():
+        console.print(f"[red]Directory not found: {devcontainer_dir}[/red]")
+        console.print("Run [cyan]ai-sbx init project[/cyan] first.")
+        return False
+
+    try:
+        template_manager = TemplateManager()
+
+        # Regenerate .env (contains credentials, restrict permissions)
+        env_content = template_manager._generate_env_file(config)
+        env_path = devcontainer_dir / ".env"
+        env_path.write_text(env_content)
+        env_path.chmod(0o600)
+        console.print(f"[green]✓[/green] Updated {env_path}")
+
+        # Regenerate docker-compose.override.yaml
+        override_content = template_manager._generate_user_override(config)
+        override_path = devcontainer_dir / "docker-compose.override.yaml"
+        override_path.write_text(override_content)
+        console.print(f"[green]✓[/green] Updated {override_path}")
+
+        if verbose:
+            console.print("\n[dim]Generated .env content:[/dim]")
+            console.print(env_content)
+            console.print("\n[dim]Generated docker-compose.override.yaml content:[/dim]")
+            console.print(override_content)
+
+        return True
+    except Exception as e:
+        console.print(f"[red]✗ Failed to regenerate derived files: {e}[/red]")
+        return False
+
+
+def run_update_env(console: Console, path: str, verbose: bool = False) -> None:
+    """Update .env and docker-compose.override.yaml from ai-sbx.yaml configuration."""
     project_path = Path(path).resolve()
 
     # Load existing ai-sbx.yaml
@@ -1808,16 +1869,4 @@ def run_update_env(console: Console, path: str, verbose: bool = False) -> None:
         console.print("Run [cyan]ai-sbx init project[/cyan] first.")
         return
 
-    # Generate new .env file
-    template_manager = TemplateManager()
-    env_content = template_manager._generate_env_file(config)
-
-    # Write .env file
-    env_path = project_path / ".devcontainer" / ".env"
-    env_path.write_text(env_content)
-
-    console.print(f"[green]✓[/green] Updated {env_path} from ai-sbx.yaml")
-
-    if verbose:
-        console.print("\n[dim]Generated .env content:[/dim]")
-        console.print(env_content)
+    _regenerate_derived_files(console, project_path, config, verbose)

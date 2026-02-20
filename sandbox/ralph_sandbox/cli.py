@@ -190,10 +190,10 @@ def init_worktree(ctx: click.Context, path: str) -> None:
 @click.argument("path", type=click.Path(), default=".")
 @click.pass_context
 def init_update(ctx: click.Context, path: str) -> None:
-    """Update .env file from ai-sbx.yaml configuration.
+    """Update .env and docker-compose.override.yaml from ai-sbx.yaml configuration.
 
-    Regenerates the .env file based on current ai-sbx.yaml settings.
-    This is useful after editing ai-sbx.yaml manually.
+    Regenerates both .env and docker-compose.override.yaml based on current
+    ai-sbx.yaml settings. This is useful after editing ai-sbx.yaml manually.
     """
     from ralph_sandbox.commands.init import run_update_env
 

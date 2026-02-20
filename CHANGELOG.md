@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- **sandbox: `ai-sbx init update` now regenerates both `.env` and `docker-compose.override.yaml`** (#27)
+  - Previously `init update` only regenerated `.env`, leaving `docker-compose.override.yaml` with stale proxy settings
+  - Re-running `init project` also updates derived files now (even with `force=False`)
+  - New `_regenerate_derived_files()` helper ensures both files stay in sync
+  - `.env` files now created with `0o600` permissions (owner-only read/write)
+  - Guard added for missing `.devcontainer/` directory with user-friendly error
+
 ### Changed
 - **sandbox: add --tag option to `image list` and `image verify` commands** (#26)
   - `ai-sbx image list --tag X` and `ai-sbx image verify --tag X` now check images with the specified tag instead of always using the default
