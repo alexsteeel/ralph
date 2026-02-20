@@ -1,6 +1,8 @@
 """Web UI for task management (kanban board + project overview)."""
 
+import hmac
 import io
+import logging
 import os
 import sys
 from collections import defaultdict
@@ -10,9 +12,10 @@ from urllib.parse import quote
 
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .core import (
     Task,
@@ -38,6 +41,96 @@ from .core import (
     update_task as _update_task,
 )
 from .mcp import get_mcp_http_app
+
+logger = logging.getLogger("ralph-tasks.web")
+
+_BEARER_PREFIX = "bearer "
+_PROTECTED_PATH_PREFIXES = ("/api/", "/mcp/", "/mcp")
+
+
+def _get_configured_api_key() -> str:
+    """Return the configured API key, stripped of whitespace."""
+    return os.environ.get("RALPH_TASKS_API_KEY", "").strip()
+
+
+def _extract_token_from_headers(headers: dict[bytes, bytes]) -> str | None:
+    """Extract auth token from ASGI headers dict.
+
+    Supports ``Authorization: Bearer <token>`` (case-insensitive prefix per
+    RFC 7235) and ``X-API-Key: <token>`` as fallback.
+    """
+    raw_auth = headers.get(b"authorization", b"")
+    try:
+        auth_header = raw_auth.decode("ascii")
+    except (UnicodeDecodeError, ValueError):
+        return None
+
+    if auth_header.lower().startswith(_BEARER_PREFIX):
+        return auth_header[len(_BEARER_PREFIX) :].strip()
+
+    raw_api_key = headers.get(b"x-api-key", b"")
+    try:
+        api_key_header = raw_api_key.decode("ascii")
+    except (UnicodeDecodeError, ValueError):
+        return None
+
+    return api_key_header or None
+
+
+class ApiKeyMiddleware:
+    """ASGI middleware that protects /api/* and /mcp/* with an API key.
+
+    When RALPH_TASKS_API_KEY env var is set (non-empty after stripping),
+    requires ``Authorization: Bearer <key>`` or ``X-API-Key: <key>``
+    header on protected paths.  When the env var is empty or unset, all
+    requests pass through (backward-compatible, disabled by default).
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+
+        api_key = _get_configured_api_key()
+        if not api_key:
+            await self.app(scope, receive, send)
+            return
+
+        path: str = scope.get("path", "")
+        if not any(path.startswith(p) for p in _PROTECTED_PATH_PREFIXES):
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        token = _extract_token_from_headers(headers)
+
+        if token is None or not hmac.compare_digest(token, api_key):
+            response = JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing API key"},
+                headers={"WWW-Authenticate": 'Bearer realm="ralph-tasks"'},
+            )
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
+
+
+def _get_max_upload_bytes() -> int:
+    """Return the maximum upload size in bytes from env (default 50 MB)."""
+    raw = os.environ.get("RALPH_TASKS_MAX_UPLOAD_MB", "50")
+    try:
+        mb = int(raw)
+    except ValueError:
+        logger.warning("Invalid RALPH_TASKS_MAX_UPLOAD_MB=%r, using default 50", raw)
+        mb = 50
+    if mb <= 0:
+        logger.warning("RALPH_TASKS_MAX_UPLOAD_MB=%d is non-positive, using default 50", mb)
+        mb = 50
+    return mb * 1024 * 1024
 
 
 def find_templates_dir() -> Path:
@@ -73,6 +166,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title="Task Cloud", lifespan=lifespan)
+app.add_middleware(ApiKeyMiddleware)
 templates = Jinja2Templates(directory=find_templates_dir())
 
 # Mount MCP server under /mcp for streamable-http access
@@ -166,6 +260,7 @@ async def projects_cloud(request: Request):
             "summary": summary,
             "project_count": len(projects),
             "monthly": monthly_list,
+            "api_key": _get_configured_api_key(),
         },
     )
 
@@ -220,6 +315,7 @@ async def kanban_board(request: Request, name: str):
             "request": request,
             "project": name,
             "board": board,
+            "api_key": _get_configured_api_key(),
         },
     )
 
@@ -310,14 +406,45 @@ async def list_attachments_endpoint(project: str, number: int):
 
 
 @app.post("/api/task/{project}/{number}/attachments")
-async def upload_attachment_endpoint(project: str, number: int, file: UploadFile = File(...)):  # noqa: B008
+async def upload_attachment_endpoint(
+    request: Request,
+    project: str,
+    number: int,
+    file: UploadFile = File(...),  # noqa: B008
+):
     """Upload an attachment to a task."""
     _require_task_or_404(project, number)
 
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
 
-    content = await file.read()
+    max_bytes = _get_max_upload_bytes()
+
+    # Quick reject via Content-Length header (if provided)
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            declared_size = int(content_length)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length header") from exc
+        if declared_size > max_bytes:
+            max_mb = max_bytes // (1024 * 1024)
+            raise HTTPException(status_code=413, detail=f"File too large (max {max_mb} MB)")
+
+    # Chunked read with size enforcement
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(65536)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            max_mb = max_bytes // (1024 * 1024)
+            raise HTTPException(status_code=413, detail=f"File too large (max {max_mb} MB)")
+        chunks.append(chunk)
+
+    content = b"".join(chunks)
     result = save_attachment(project, number, file.filename, content)
     return {"ok": True, **result}
 

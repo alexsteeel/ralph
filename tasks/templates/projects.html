@@ -126,7 +126,9 @@ async function openMonthlyModal(month) {
     modal.classList.add('active');
 
     try {
-        const res = await fetch(`/api/monthly/${month}`);
+        const res = await fetch(`/api/monthly/${month}`, {
+            headers: authHeaders()
+        });
         const data = await res.json();
         list.textContent = '';
 

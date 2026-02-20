@@ -1,5 +1,6 @@
 """Tests for combined ASGI app: web UI + MCP mount + health endpoint."""
 
+import io
 from unittest.mock import patch
 
 import pytest
@@ -7,10 +8,19 @@ from ralph_tasks.web import app
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
+TEST_API_KEY = "test-secret-key-12345"
+
 
 @pytest.fixture
 def client():
     """TestClient for the FastAPI app."""
+    return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture
+def auth_client(monkeypatch):
+    """TestClient with API key authentication enabled."""
+    monkeypatch.setenv("RALPH_TASKS_API_KEY", TEST_API_KEY)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -155,3 +165,189 @@ class TestWebMainConfig:
 
         assert captured["host"] == "0.0.0.0"
         assert captured["port"] == 3000
+
+
+class TestExtractToken:
+    """Tests for _extract_token_from_headers helper."""
+
+    def test_bearer_token_extracted(self):
+        from ralph_tasks.web import _extract_token_from_headers
+
+        headers = {b"authorization": b"Bearer my-secret"}
+        assert _extract_token_from_headers(headers) == "my-secret"
+
+    def test_bearer_case_insensitive(self):
+        from ralph_tasks.web import _extract_token_from_headers
+
+        headers = {b"authorization": b"bearer my-secret"}
+        assert _extract_token_from_headers(headers) == "my-secret"
+
+    def test_x_api_key_fallback(self):
+        from ralph_tasks.web import _extract_token_from_headers
+
+        headers = {b"x-api-key": b"my-secret"}
+        assert _extract_token_from_headers(headers) == "my-secret"
+
+    def test_no_auth_headers(self):
+        from ralph_tasks.web import _extract_token_from_headers
+
+        assert _extract_token_from_headers({}) is None
+
+    def test_binary_auth_header_returns_none(self):
+        """Non-ASCII authorization header should not crash."""
+        from ralph_tasks.web import _extract_token_from_headers
+
+        headers = {b"authorization": b"\xff\xfe"}
+        assert _extract_token_from_headers(headers) is None
+
+
+class TestApiKeyAuth:
+    """Tests for API key authentication middleware."""
+
+    def test_health_no_auth_required(self, auth_client):
+        """Health endpoint should work without authentication."""
+        response = auth_client.get("/health")
+        assert response.status_code == 200
+
+    def test_api_401_without_key(self, auth_client):
+        """/api/* should return 401 when no key is provided."""
+        with patch("ralph_tasks.web.get_task", return_value=None):
+            response = auth_client.get("/api/task/test/1")
+        assert response.status_code == 401
+        assert "API key" in response.json()["detail"]
+
+    def test_api_bearer_token(self, auth_client):
+        """Authorization: Bearer <key> should grant access."""
+        with patch("ralph_tasks.web.get_task", return_value=None):
+            response = auth_client.get(
+                "/api/task/test/1",
+                headers={"Authorization": f"Bearer {TEST_API_KEY}"},
+            )
+        assert response.status_code == 404  # 404 because task doesn't exist, not 401
+
+    def test_api_x_api_key_header(self, auth_client):
+        """X-API-Key header should grant access."""
+        with patch("ralph_tasks.web.get_task", return_value=None):
+            response = auth_client.get(
+                "/api/task/test/1",
+                headers={"X-API-Key": TEST_API_KEY},
+            )
+        assert response.status_code == 404
+
+    def test_api_wrong_key(self, auth_client):
+        """Wrong API key should return 401."""
+        with patch("ralph_tasks.web.get_task", return_value=None):
+            response = auth_client.get(
+                "/api/task/test/1",
+                headers={"Authorization": "Bearer wrong-key"},
+            )
+        assert response.status_code == 401
+
+    def test_mcp_401_without_key(self, auth_client):
+        """/mcp/* should return 401 when auth is enabled but no key provided."""
+        response = auth_client.get("/mcp/")
+        assert response.status_code == 401
+
+    def test_no_auth_when_env_not_set(self, client):
+        """When RALPH_TASKS_API_KEY is not set, all requests pass through."""
+        with patch("ralph_tasks.web.get_task", return_value=None):
+            response = client.get("/api/task/test/1")
+        assert response.status_code == 404  # Not 401
+
+    def test_web_pages_no_auth(self, auth_client):
+        """Root page and kanban pages should not require auth."""
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            response = auth_client.get("/")
+        assert response.status_code == 200
+
+        with patch("ralph_tasks.web.list_tasks", return_value=[]):
+            response = auth_client.get("/kanban/test-project")
+        assert response.status_code == 200
+
+    def test_bearer_case_insensitive(self, auth_client):
+        """Bearer scheme should be case-insensitive per RFC 7235."""
+        with patch("ralph_tasks.web.get_task", return_value=None):
+            response = auth_client.get(
+                "/api/task/test/1",
+                headers={"Authorization": f"bearer {TEST_API_KEY}"},
+            )
+        assert response.status_code == 404  # Authenticated, task not found
+
+        with patch("ralph_tasks.web.get_task", return_value=None):
+            response = auth_client.get(
+                "/api/task/test/1",
+                headers={"Authorization": f"BEARER {TEST_API_KEY}"},
+            )
+        assert response.status_code == 404
+
+    def test_whitespace_only_key_is_disabled(self, monkeypatch):
+        """Whitespace-only RALPH_TASKS_API_KEY should be treated as unset."""
+        monkeypatch.setenv("RALPH_TASKS_API_KEY", "   ")
+        client = TestClient(app, raise_server_exceptions=False)
+        with patch("ralph_tasks.web.get_task", return_value=None):
+            response = client.get("/api/task/test/1")
+        assert response.status_code == 404  # Not 401 -- auth disabled
+
+    def test_mcp_root_path_protected(self, auth_client):
+        """/mcp (without trailing slash) should also be protected."""
+        response = auth_client.get("/mcp")
+        assert response.status_code in (401, 307)  # 401 if no redirect, 307 if redirect
+
+
+class TestUploadSizeLimit:
+    """Tests for file upload size limit."""
+
+    def test_small_file_accepted(self, client, monkeypatch):
+        """A small file should be accepted."""
+        monkeypatch.setenv("RALPH_TASKS_MAX_UPLOAD_MB", "1")
+        small_content = b"Hello, world!"
+
+        with (
+            patch("ralph_tasks.web.get_task") as mock_get,
+            patch(
+                "ralph_tasks.web.save_attachment",
+                return_value={"name": "test.txt", "size": len(small_content)},
+            ),
+        ):
+            mock_get.return_value = True  # Task exists
+            response = client.post(
+                "/api/task/test/1/attachments",
+                files={"file": ("test.txt", io.BytesIO(small_content), "text/plain")},
+            )
+        assert response.status_code == 200
+
+    def test_large_file_rejected_413(self, client, monkeypatch):
+        """A file exceeding the limit should return 413."""
+        monkeypatch.setenv("RALPH_TASKS_MAX_UPLOAD_MB", "1")
+        # Create content slightly over 1MB
+        large_content = b"x" * (1024 * 1024 + 1)
+
+        with patch("ralph_tasks.web.get_task") as mock_get:
+            mock_get.return_value = True
+            response = client.post(
+                "/api/task/test/1/attachments",
+                files={"file": ("big.bin", io.BytesIO(large_content), "application/octet-stream")},
+            )
+        assert response.status_code == 413
+        assert "too large" in response.json()["detail"]
+
+    def test_default_limit_50mb(self, monkeypatch):
+        """Default max upload should be 50 MB."""
+        monkeypatch.delenv("RALPH_TASKS_MAX_UPLOAD_MB", raising=False)
+        from ralph_tasks.web import _get_max_upload_bytes
+
+        assert _get_max_upload_bytes() == 50 * 1024 * 1024
+
+    def test_invalid_max_upload_env_falls_back(self, monkeypatch):
+        """Non-integer RALPH_TASKS_MAX_UPLOAD_MB should fall back to 50 MB."""
+        monkeypatch.setenv("RALPH_TASKS_MAX_UPLOAD_MB", "not-a-number")
+        from ralph_tasks.web import _get_max_upload_bytes
+
+        assert _get_max_upload_bytes() == 50 * 1024 * 1024
+
+    def test_negative_max_upload_env_falls_back(self, monkeypatch):
+        """Negative RALPH_TASKS_MAX_UPLOAD_MB should fall back to 50 MB."""
+        monkeypatch.setenv("RALPH_TASKS_MAX_UPLOAD_MB", "-10")
+        from ralph_tasks.web import _get_max_upload_bytes
+
+        assert _get_max_upload_bytes() == 50 * 1024 * 1024

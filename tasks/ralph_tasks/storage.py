@@ -239,8 +239,15 @@ def migrate_project_prefix(old_project: str, new_project: str) -> int:
     """
     client, bucket = _ready()
 
-    old_prefix = _sanitize_key_component(old_project) + "/"
-    new_prefix = _sanitize_key_component(new_project) + "/"
+    safe_old = _sanitize_key_component(old_project)
+    safe_new = _sanitize_key_component(new_project)
+    if not safe_old:
+        raise ValueError(f"Invalid old project name: {old_project!r}")
+    if not safe_new:
+        raise ValueError(f"Invalid new project name: {new_project!r}")
+
+    old_prefix = safe_old + "/"
+    new_prefix = safe_new + "/"
 
     if old_prefix == new_prefix:
         logger.warning(

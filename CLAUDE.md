@@ -137,8 +137,11 @@ MCP server registration in `entrypoint.sh` (with health check fallback):
 ```bash
 # Prefer streamable-http if container is running, fallback to local stdio
 # Devcontainer reaches ralph-tasks via ai-sbx-proxy-internal network
+# When RALPH_TASKS_API_KEY is set, adds --header for auth and skips stdio fallback
 if curl -sf --max-time 3 "http://ai-sbx-ralph-tasks:8000/health" >/dev/null 2>&1; then
-    claude mcp add -s user --transport http ralph-tasks "http://ai-sbx-ralph-tasks:8000/mcp"
+    claude mcp add -s user --transport http [--header "Authorization: Bearer $KEY"] ralph-tasks "http://ai-sbx-ralph-tasks:8000/mcp"
+elif [ -n "$RALPH_TASKS_API_KEY" ]; then
+    # Stdio fallback skipped — auth requires network transport
 else
     claude mcp add -s user ralph-tasks -- ralph-tasks serve
 fi
@@ -149,6 +152,8 @@ Environment variables for ralph-tasks container:
 - `NEO4J_USER` / `NEO4J_PASSWORD` — Neo4j credentials
 - `MINIO_ENDPOINT` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` — MinIO credentials
 - `RALPH_TASKS_HOST` / `RALPH_TASKS_PORT` — bind address (default: `127.0.0.1:8000`)
+- `RALPH_TASKS_API_KEY` — API key for `/api/*` and `/mcp/*` authentication (empty = disabled)
+- `RALPH_TASKS_MAX_UPLOAD_MB` — maximum upload size in MB (default: `50`)
 
 ## Development Notes
 

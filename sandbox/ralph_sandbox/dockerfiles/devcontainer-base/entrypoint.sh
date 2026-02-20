@@ -184,9 +184,18 @@ if command -v claude &> /dev/null; then
         true  # already configured
     else
         RALPH_TASKS_URL="http://ai-sbx-ralph-tasks:8000/mcp"
+        MCP_ADD_ARGS=(claude mcp add -s user --transport http)
+        if [ -n "${RALPH_TASKS_API_KEY:-}" ]; then
+            MCP_ADD_ARGS+=(--header "Authorization: Bearer ${RALPH_TASKS_API_KEY}")
+        fi
+        MCP_ADD_ARGS+=(ralph-tasks "$RALPH_TASKS_URL")
         if curl -sf --max-time 3 "http://ai-sbx-ralph-tasks:8000/health" >/dev/null 2>&1; then
-            claude mcp add -s user --transport http ralph-tasks "$RALPH_TASKS_URL" 2>/dev/null && \
+            "${MCP_ADD_ARGS[@]}" 2>/dev/null && \
                 echo "Added ralph-tasks MCP server (streamable-http via ai-sbx-ralph-tasks:8000)" || true
+        elif [ -n "${RALPH_TASKS_API_KEY:-}" ]; then
+            echo "Warning: ralph-tasks container not reachable and RALPH_TASKS_API_KEY is set."
+            echo "  Stdio fallback skipped — auth requires the network transport."
+            echo "  Ensure ai-sbx-ralph-tasks is running for MCP access."
         else
             echo "Warning: ralph-tasks container not reachable, falling back to local stdio"
             claude mcp add -s user ralph-tasks -- ralph-tasks serve 2>/dev/null && \

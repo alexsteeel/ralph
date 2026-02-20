@@ -1204,6 +1204,13 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
+        const _apiKey = {{ api_key|default("", true)|tojson }};
+        function authHeaders(extra) {
+            const h = extra ? Object.assign({}, extra) : {};
+            if (_apiKey) h['Authorization'] = 'Bearer ' + _apiKey;
+            return h;
+        }
+
         const modal = document.getElementById('modal');
         const modalContent = document.getElementById('modal-content');
         const modalTitle = document.getElementById('modal-title');
@@ -1240,7 +1247,7 @@
             try {
                 const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ status: newStatus })
                 });
                 if (res.ok) {
@@ -1413,7 +1420,7 @@
             try {
                 const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(payload)
                 });
                 if (res.ok) {
@@ -1452,7 +1459,8 @@
 
             try {
                 const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: authHeaders()
                 });
                 if (res.ok) {
                     // Remove card from DOM
@@ -1573,7 +1581,9 @@
 
         async function refreshTask() {
             try {
-                const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}`);
+                const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}`, {
+                    headers: authHeaders()
+                });
                 if (res.ok) {
                     const data = await res.json();
                     currentData = {
@@ -1679,13 +1689,13 @@
                 if (createMode === 'project') {
                     res = await fetch('/api/project', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: authHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify({ name })
                     });
                 } else {
                     res = await fetch(`/api/task/${createProject}`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: authHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify({
                             description: name,
                             body: createBodyInput.value
@@ -1811,7 +1821,9 @@
             if (!currentTask.project || !currentTask.number) return;
 
             try {
-                const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}/attachments`);
+                const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}/attachments`, {
+                    headers: authHeaders()
+                });
                 if (res.ok) {
                     const data = await res.json();
                     currentAttachments = data.attachments || [];
@@ -1877,6 +1889,7 @@
                 try {
                     const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}/attachments`, {
                         method: 'POST',
+                        headers: authHeaders(),
                         body: formData
                     });
 
@@ -1901,7 +1914,8 @@
 
             try {
                 const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}/attachments/${encodeURIComponent(filename)}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: authHeaders()
                 });
 
                 if (res.ok) {

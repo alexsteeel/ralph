@@ -1,6 +1,60 @@
 """Tests for ralph_tasks.storage — MinIO S3 storage module."""
 
 import pytest
+from ralph_tasks.storage import (
+    _object_key,
+    _object_prefix,
+    _sanitize_key_component,
+)
+
+
+class TestStorageSanitization:
+    """Unit tests for storage key sanitization (no MinIO required)."""
+
+    def test_sanitize_removes_slashes(self):
+        """Slashes should be stripped to prevent path traversal."""
+        assert _sanitize_key_component("../../etc/passwd") == "etcpasswd"
+        assert _sanitize_key_component("a/b/c") == "abc"
+        assert _sanitize_key_component("a\\b\\c") == "abc"
+
+    def test_sanitize_removes_null_bytes(self):
+        """Null bytes should be stripped."""
+        assert _sanitize_key_component("test\x00file") == "testfile"
+
+    def test_sanitize_removes_leading_dots(self):
+        """Leading dots should be stripped to prevent hidden files."""
+        assert _sanitize_key_component("..hidden") == "hidden"
+        assert _sanitize_key_component(".dotfile") == "dotfile"
+        assert _sanitize_key_component("normal.txt") == "normal.txt"
+
+    def test_object_key_crafted_project(self):
+        """Crafted project name with traversal chars should be sanitized."""
+        key = _object_key("../other-project", 1, "file.txt")
+        assert key == "other-project/001/file.txt"
+        assert ".." not in key
+
+    def test_object_prefix_sanitized(self):
+        """_object_prefix should sanitize project names."""
+        # Slashes removed, leading dots stripped
+        prefix = _object_prefix("../other", 1)
+        assert prefix == "other/001/"
+        assert ".." not in prefix
+
+        # Slashes removed, no leading dots to strip
+        prefix2 = _object_prefix("test/secret", 1)
+        assert prefix2 == "testsecret/001/"
+        assert "/" not in prefix2.split("/")[0]
+
+    def test_empty_after_sanitize_raises(self):
+        """Completely invalid names should raise ValueError."""
+        with pytest.raises(ValueError):
+            _object_key("///", 1, "file.txt")
+
+        with pytest.raises(ValueError):
+            _object_key("project", 1, "///")
+
+        with pytest.raises(ValueError):
+            _object_prefix("...", 1)
 
 
 @pytest.mark.minio

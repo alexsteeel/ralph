@@ -3,6 +3,17 @@
 ## [Unreleased]
 
 ### Added
+- **tasks: security hardening — API auth, upload limits, port binding** (#37)
+  - `ApiKeyMiddleware` ASGI middleware protecting `/api/*` and `/mcp/*` with `RALPH_TASKS_API_KEY` env var
+  - Supports `Authorization: Bearer <key>` and `X-API-Key: <key>` headers (RFC 7235)
+  - Timing-safe comparison via `hmac.compare_digest`, `WWW-Authenticate` header on 401
+  - File upload size limit via `RALPH_TASKS_MAX_UPLOAD_MB` (default 50 MB), chunked read with Content-Length fast reject
+  - Docker ports bound to `127.0.0.1` (MinIO, Neo4j, ralph-tasks, docker-registry-proxy)
+  - `migrate_project_prefix()` validates sanitized components (prevents empty prefix)
+  - MCP registration with `--header "Authorization: Bearer ..."` when API key is set
+  - Stdio fallback skipped when API key is configured (auth bypass prevention)
+  - JavaScript `authHeaders()` helper in templates for authenticated fetch calls
+  - New tests: 16 auth/upload tests in `test_web_mcp_mount.py`, 6 sanitization tests in `test_storage.py`
 - **tasks: project name normalization — hyphens vs underscores** (#36)
   - `normalize_project_name()` in `core.py` — canonical form uses hyphens (`face_recognition` → `face-recognition`)
   - Applied to all 14 public functions in `core.py` (projects, tasks, attachments)
