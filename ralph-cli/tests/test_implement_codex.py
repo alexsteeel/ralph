@@ -35,21 +35,11 @@ def session_log():
 class TestBuildCodexReviewPrompt:
     """Tests for _build_codex_review_prompt."""
 
-    def test_first_iteration(self):
-        prompt = _build_codex_review_prompt("myproject#1", 1)
+    def test_prompt_contains_task_ref(self):
+        prompt = _build_codex_review_prompt("myproject#1")
         assert "myproject#1" in prompt
         assert "LGTM" in prompt
         assert "НЕ ИЗМЕНЯЙ КОД" in prompt
-
-    def test_subsequent_iteration(self):
-        prompt = _build_codex_review_prompt("myproject#1", 2)
-        assert "Повторная проверка" in prompt
-        assert "итерация 2" in prompt
-        assert "LGTM" in prompt
-
-    def test_third_iteration(self):
-        prompt = _build_codex_review_prompt("myproject#1", 3)
-        assert "итерация 3" in prompt
 
 
 class TestBuildClaudeFixPrompt:

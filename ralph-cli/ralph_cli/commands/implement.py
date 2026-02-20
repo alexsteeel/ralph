@@ -323,33 +323,25 @@ def execute_task_with_recovery(
         return result
 
 
-def _build_codex_review_prompt(task_ref: str, iteration: int) -> str:
-    """Build prompt for codex review."""
-    if iteration == 1:
-        return (
-            f"Выполни код-ревью для задачи {task_ref}.\n"
-            "\n"
-            "1. Получи детали задачи через MCP md-task-mcp: tasks(project, number)\n"
-            "2. Прочитай CLAUDE.md для URL/credentials тестового сервера\n"
-            "3. Проанализируй последний коммит (git log -1 -p, git diff HEAD~1)\n"
-            "4. Если есть frontend — проверь UI через playwright MCP\n"
-            "5. ДОБАВЬ результаты к Review: update_task(review=existing + new)\n"
-            "\n"
-            "Формат замечаний: CRITICAL / HIGH / MEDIUM / LOW\n"
-            'Если замечаний нет — напиши "LGTM" в конце.\n'
-            "\n"
-            "НЕ ИЗМЕНЯЙ КОД — только анализируй."
-        )
+def _build_codex_review_prompt(task_ref: str) -> str:
+    """Build prompt for codex review (first iteration only).
+
+    Subsequent iterations use --uncommitted flag without a prompt
+    (codex CLI doesn't allow both --uncommitted and a prompt).
+    """
     return (
-        f"Повторная проверка (итерация {iteration}) для задачи {task_ref}.\n"
+        f"Выполни код-ревью для задачи {task_ref}.\n"
         "\n"
-        "1. Получи текущий Review из задачи через md-task-mcp\n"
-        "2. Проверь что предыдущие замечания исправлены (git diff)\n"
-        "3. Проверь что исправления не внесли новых проблем\n"
-        "4. ДОПОЛНИ Review в задаче\n"
+        "1. Получи детали задачи через MCP md-task-mcp: tasks(project, number)\n"
+        "2. Прочитай CLAUDE.md для URL/credentials тестового сервера\n"
+        "3. Проанализируй последний коммит (git log -1 -p, git diff HEAD~1)\n"
+        "4. Если есть frontend — проверь UI через playwright MCP\n"
+        "5. ДОБАВЬ результаты к Review: update_task(review=existing + new)\n"
         "\n"
-        'Если всё исправлено — напиши "LGTM".\n'
-        "Если есть новые/неисправленные проблемы — опиши в формате CRITICAL/HIGH/MEDIUM/LOW."
+        "Формат замечаний: CRITICAL / HIGH / MEDIUM / LOW\n"
+        'Если замечаний нет — напиши "LGTM" в конце.\n'
+        "\n"
+        "НЕ ИЗМЕНЯЙ КОД — только анализируй."
     )
 
 
@@ -383,22 +375,31 @@ def run_codex_review(
         console.print("[red]codex not found in PATH[/red]")
         return False, False
 
-    prompt = _build_codex_review_prompt(task_ref, iteration)
     model = settings.codex_review_model
 
-    # First iteration reviews committed code, subsequent ones check uncommitted fixes
-    uncommitted_flag = ["--uncommitted"] if iteration > 1 else []
-
-    cmd = [
-        "codex",
-        "review",
-        *uncommitted_flag,
-        "-c",
-        f'model="{model}"',
-        "-c",
-        'model_reasoning_effort="high"',
-        prompt,
-    ]
+    # First iteration reviews committed code with custom prompt,
+    # subsequent ones check uncommitted fixes (--uncommitted is incompatible with prompt)
+    if iteration > 1:
+        cmd = [
+            "codex",
+            "review",
+            "--uncommitted",
+            "-c",
+            f'model="{model}"',
+            "-c",
+            'model_reasoning_effort="high"',
+        ]
+    else:
+        prompt = _build_codex_review_prompt(task_ref)
+        cmd = [
+            "codex",
+            "review",
+            "-c",
+            f'model="{model}"',
+            "-c",
+            'model_reasoning_effort="high"',
+            prompt,
+        ]
 
     console.print(f"[cyan]Codex review iteration {iteration}...[/cyan]")
 
