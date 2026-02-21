@@ -202,10 +202,6 @@ Object keys follow the pattern `{project}/{NNN}/{filename}`. The storage module 
 
 MinIO tests use `@pytest.mark.minio` marker and auto-skip when MinIO is unreachable. The test conftest tries `ai-sbx-minio:9000` first (devcontainer via proxy-internal network), then `docker:59000`, then `localhost:59000`, then `localhost:19000` (test docker-compose). Override via `MINIO_TEST_ENDPOINT` env var. Test credentials: `MINIO_TEST_ACCESS_KEY`/`MINIO_TEST_SECRET_KEY` (defaults: `minioadmin`/`minioadmin`).
 
-### `ralph review` inside nested Claude Code sessions
-
-`ralph review` CLI cannot run inside another Claude Code session (nested sessions crash). Use Task agents with `subagent_type="pr-review-toolkit:code-reviewer"` etc. as a workaround when running reviews from within Claude Code.
-
 ### Neo4j credentials: NEO4J_AUTH vs NEO4J_USER/NEO4J_PASSWORD
 
 Neo4j Docker image uses `NEO4J_AUTH=neo4j/password` (slash-separated) format. The Python Neo4j driver (`GraphClient`) expects **separate** `NEO4J_USER` and `NEO4J_PASSWORD` variables. When configuring docker-compose services:

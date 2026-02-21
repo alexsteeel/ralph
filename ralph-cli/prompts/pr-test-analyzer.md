@@ -8,7 +8,9 @@ Analyze test coverage and quality for the changes. Write findings to Neo4j via M
 
 1. Get task details: `tasks("{project}", {number})` via ralph-tasks MCP
 2. Read the task plan to understand what was implemented
-3. Analyze the latest commit: `git log -1 -p` and `git diff HEAD~1`
+3. Determine the diff scope:
+   - If base_commit is provided (`{base_commit}`), use: `git diff {base_commit}..HEAD`
+   - Otherwise, use: `git diff HEAD~1`
 4. Read test files and implementation files
 5. Write each finding via `add_review_finding` MCP tool
 
@@ -39,4 +41,4 @@ For each issue found, call `add_review_finding` with:
 - Focus on gaps that could hide real bugs
 - Suggest specific test cases, not vague "add more tests"
 - Do NOT modify any code — only analyze and write findings
-- If coverage is adequate, write a finding with text "LGTM — test coverage is adequate"
+- If coverage is adequate — do NOT create any findings

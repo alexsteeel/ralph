@@ -66,6 +66,7 @@ def ctx(temp_dir, settings, session_log, notifier):
         session_log=session_log,
         notifier=notifier,
         main_session_id="main-session-123",
+        base_commit="abc123def456",
     )
 
 
@@ -216,6 +217,20 @@ class TestRunSingleReviewAgent:
         run_single_review_agent(ctx, "code-reviewer", "code-review")
         call_kwargs = mock_run_claude.call_args.kwargs
         assert call_kwargs["model"] == "sonnet"
+
+    @patch("ralph_cli.commands.review_chain.run_claude")
+    @patch("ralph_cli.commands.review_chain.load_prompt")
+    def test_passes_base_commit_to_prompt(self, mock_load, mock_run_claude, ctx):
+        mock_load.return_value = "prompt text"
+        mock_run_claude.return_value = _make_result()
+        run_single_review_agent(ctx, "code-reviewer", "code-review")
+        mock_load.assert_called_once_with(
+            "code-reviewer",
+            task_ref="proj#1",
+            project="proj",
+            number="1",
+            base_commit="abc123def456",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -383,11 +398,12 @@ class TestRunCodexReviewPhase:
         assert result.success is True
         assert "not found" in result.error
 
+    @patch("ralph_cli.commands.review_chain.check_lgtm", return_value=(True, 0))
     @patch("ralph_cli.commands.review_chain.shutil.which", return_value="/usr/bin/codex")
     @patch("ralph_cli.commands.review_chain.subprocess.Popen")
-    def test_lgtm_first_iteration(self, mock_popen, mock_which, ctx):
+    def test_lgtm_first_iteration(self, mock_popen, mock_which, mock_lgtm, ctx):
         mock_proc = MagicMock()
-        mock_proc.stdout = iter([b"thinking\n", b"Review complete. LGTM\n"])
+        mock_proc.stdout = iter([b"Review complete.\n"])
         mock_proc.returncode = 0
         mock_proc.wait.return_value = 0
         mock_popen.return_value = mock_proc
@@ -395,6 +411,7 @@ class TestRunCodexReviewPhase:
         result = run_codex_review_phase(ctx)
         assert result.success is True
         assert result.lgtm is True
+        mock_lgtm.assert_called_with(ctx.project, ctx.task_number, ["codex-review"])
 
     @patch("ralph_cli.commands.review_chain.shutil.which", return_value="/usr/bin/codex")
     @patch("ralph_cli.commands.review_chain.subprocess.Popen")
@@ -408,11 +425,12 @@ class TestRunCodexReviewPhase:
         result = run_codex_review_phase(ctx)
         assert result.success is False
 
+    @patch("ralph_cli.commands.review_chain.check_lgtm", return_value=(True, 0))
     @patch("ralph_cli.commands.review_chain.shutil.which", return_value="/usr/bin/codex")
     @patch("ralph_cli.commands.review_chain.subprocess.Popen")
-    def test_first_iteration_no_uncommitted(self, mock_popen, mock_which, ctx):
+    def test_first_iteration_no_uncommitted(self, mock_popen, mock_which, mock_lgtm, ctx):
         mock_proc = MagicMock()
-        mock_proc.stdout = iter([b"thinking\n", b"LGTM\n"])
+        mock_proc.stdout = iter([b"Review complete.\n"])
         mock_proc.returncode = 0
         mock_proc.wait.return_value = 0
         mock_popen.return_value = mock_proc
@@ -420,6 +438,33 @@ class TestRunCodexReviewPhase:
         run_codex_review_phase(ctx)
         cmd = mock_popen.call_args[0][0]
         assert "--uncommitted" not in cmd
+
+    @patch("ralph_cli.commands.review_chain.create_fixup_commit")
+    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=True)
+    @patch("ralph_cli.commands.review_chain.check_lgtm")
+    @patch("ralph_cli.commands.review_chain.shutil.which", return_value="/usr/bin/codex")
+    @patch("ralph_cli.commands.review_chain.subprocess.Popen")
+    def test_not_lgtm_triggers_fix(
+        self, mock_popen, mock_which, mock_lgtm, mock_fix, mock_fixup, ctx
+    ):
+        """When Neo4j has open findings, fix session is triggered."""
+
+        def make_proc():
+            proc = MagicMock()
+            proc.stdout = iter([b"Review output.\n"])
+            proc.returncode = 0
+            proc.wait.return_value = 0
+            return proc
+
+        mock_popen.side_effect = [make_proc(), make_proc()]
+
+        # First check: not LGTM (2 findings), after fix: LGTM
+        mock_lgtm.side_effect = [(False, 2), (True, 0)]
+
+        result = run_codex_review_phase(ctx)
+        assert result.success is True
+        assert result.lgtm is True
+        mock_fix.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -558,6 +603,37 @@ class TestRunReviewChain:
             notifier=notifier,
         )
         notifier.review_failed.assert_called_once()
+
+    @patch("ralph_cli.commands.review_chain.run_finalization_phase")
+    @patch("ralph_cli.commands.review_chain.run_codex_review_phase")
+    @patch("ralph_cli.commands.review_chain.run_security_review_phase")
+    @patch("ralph_cli.commands.review_chain.run_simplifier_phase")
+    @patch("ralph_cli.commands.review_chain.run_code_review_phase")
+    def test_base_commit_passed_to_context(
+        self,
+        mock_code,
+        mock_simp,
+        mock_sec,
+        mock_codex,
+        mock_final,
+        temp_dir,
+        settings,
+        session_log,
+    ):
+        for mock in [mock_code, mock_simp, mock_sec, mock_codex, mock_final]:
+            mock.return_value = ReviewPhaseResult(success=True, lgtm=True)
+
+        run_review_chain(
+            task_ref="proj#1",
+            working_dir=temp_dir,
+            log_dir=temp_dir,
+            settings=settings,
+            session_log=session_log,
+            base_commit="abc123",
+        )
+        # Verify context passed to first phase has base_commit
+        ctx = mock_code.call_args[0][0]
+        assert ctx.base_commit == "abc123"
 
     @patch("ralph_cli.commands.review_chain.run_finalization_phase")
     @patch("ralph_cli.commands.review_chain.run_codex_review_phase")

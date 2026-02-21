@@ -8,9 +8,12 @@ class TestLoadPrompt:
     """Tests for load_prompt function."""
 
     def test_loads_existing_prompt(self):
-        text = load_prompt("code-reviewer", task_ref="proj#1", project="proj", number="1")
+        text = load_prompt(
+            "code-reviewer", task_ref="proj#1", project="proj", number="1", base_commit="abc123"
+        )
         assert "proj#1" in text
         assert "code-review" in text
+        assert "abc123" in text
 
     def test_loads_without_substitution(self):
         text = load_prompt("code-reviewer")

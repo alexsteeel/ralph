@@ -9,7 +9,7 @@ from rich.console import Console
 from ..config import Settings, get_settings
 from ..errors import ErrorType
 from ..executor import TaskResult, build_prompt, expand_task_ranges, run_claude
-from ..git import cleanup_working_dir
+from ..git import cleanup_working_dir, get_head_commit
 from ..logging import SessionLog, format_duration
 from ..notify import Notifier
 from ..recovery import recovery_loop, should_recover, should_retry_fresh
@@ -115,6 +115,9 @@ def run_implement(
             console.print(f"[dim]Cleaned {len(cleaned)} files[/dim]")
             session_log.append(f"Cleaned {len(cleaned)} files")
 
+        # Capture HEAD before task execution for review scope
+        base_commit = get_head_commit(working_dir)
+
         result = execute_task_with_recovery(
             task_ref=task_ref,
             working_dir=working_dir,
@@ -148,6 +151,7 @@ def run_implement(
                 session_log=session_log,
                 main_session_id=result.session_id,
                 notifier=notifier,
+                base_commit=base_commit,
             )
             if chain_ok:
                 console.print("[green]✓ Review Chain: completed[/green]")

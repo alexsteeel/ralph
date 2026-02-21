@@ -154,6 +154,18 @@ def commit_wip(working_dir: Path, task_ref: str, message: str) -> str | None:
         return None
 
 
+def get_head_commit(working_dir: Path) -> str | None:
+    """Get current HEAD commit hash."""
+    repo = get_repo(working_dir)
+    if not repo:
+        return None
+
+    try:
+        return repo.head.commit.hexsha
+    except (ValueError, TypeError):
+        return None
+
+
 def get_current_branch(working_dir: Path) -> str | None:
     """Get current branch name."""
     repo = get_repo(working_dir)

@@ -36,6 +36,7 @@ class ReviewChainContext:
     session_log: SessionLog
     notifier: Notifier
     main_session_id: str | None = None
+    base_commit: str | None = None
     review_session_ids: dict[str, str | None] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -207,6 +208,7 @@ def run_single_review_agent(
             task_ref=ctx.task_ref,
             project=ctx.project,
             number=str(ctx.task_number),
+            base_commit=ctx.base_commit or "",
         )
     except FileNotFoundError as e:
         logger.error("Prompt not found: %s", e)
@@ -393,6 +395,7 @@ def run_simplifier_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
             task_ref=ctx.task_ref,
             project=ctx.project,
             number=str(ctx.task_number),
+            base_commit=ctx.base_commit or "",
         )
     except FileNotFoundError as e:
         ctx.session_log.append(f"Code simplifier skipped: {e}")
@@ -511,6 +514,7 @@ def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
             task_ref=ctx.task_ref,
             project=ctx.project,
             number=str(ctx.task_number),
+            base_commit=ctx.base_commit or "",
         )
     except FileNotFoundError:
         console.print("[yellow]⚠ Codex reviewer prompt not found[/yellow]")
@@ -555,16 +559,9 @@ def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                 )
-                past_prompt = False
-                codex_output_lines: list[str] = []
                 for raw_line in proc.stdout:
                     line = raw_line.decode("utf-8", errors="replace")
                     log_file.write(line)
-                    text = line.strip()
-                    if not past_prompt and text.startswith("thinking"):
-                        past_prompt = True
-                    if past_prompt:
-                        codex_output_lines.append(text)
                 proc.wait()
 
             duration = int(time.time() - start_time)
@@ -578,19 +575,19 @@ def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
                 ctx.session_log.append(f"Codex review failed at iteration {iteration}")
                 return ReviewPhaseResult(success=False, error=f"Exit code {proc.returncode}")
 
-            codex_output = "\n".join(codex_output_lines)
-            is_lgtm = "LGTM" in codex_output
+            console.print(f"[green]Codex review done ({format_duration(duration)})[/green]")
 
-            console.print(
-                f"[green]Codex review done ({format_duration(duration)})"
-                f"{' — LGTM!' if is_lgtm else ''}[/green]"
-            )
+            # Check LGTM via Neo4j findings (consistent with other phases)
+            is_lgtm, open_count = check_lgtm(ctx.project, ctx.task_number, ["codex-review"])
 
             if is_lgtm:
                 if iteration > 1:
                     create_fixup_commit(ctx.working_dir, ctx.session_log, "codex fixes")
                 ctx.session_log.append(f"Codex LGTM after {iteration} iteration(s)")
+                console.print("[green]✓ Codex Review: LGTM[/green]")
                 return ReviewPhaseResult(success=True, lgtm=True)
+
+            console.print(f"[yellow]Codex review: {open_count} open finding(s)[/yellow]")
 
             # Fix (not on last iteration)
             if iteration < max_iter:
@@ -666,6 +663,7 @@ def run_review_chain(
     session_log: SessionLog,
     main_session_id: str | None = None,
     notifier: Notifier | None = None,
+    base_commit: str | None = None,
 ) -> bool:
     """Run full review chain after main implementation.
 
@@ -691,6 +689,7 @@ def run_review_chain(
         session_log=session_log,
         notifier=notifier,
         main_session_id=main_session_id,
+        base_commit=base_commit,
     )
 
     console.rule(f"[bold blue]Review Chain: {task_ref}[/bold blue]")

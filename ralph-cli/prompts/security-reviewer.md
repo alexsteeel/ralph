@@ -7,7 +7,9 @@ Analyze changed code for security vulnerabilities. Write findings to Neo4j via M
 ## Instructions
 
 1. Get task details: `tasks("{project}", {number})` via ralph-tasks MCP
-2. Analyze the latest commit: `git log -1 -p` and `git diff HEAD~1`
+2. Determine the diff scope:
+   - If base_commit is provided (`{base_commit}`), use: `git diff {base_commit}..HEAD`
+   - Otherwise, use: `git diff HEAD~1`
 3. Read changed files in full for context
 4. Check for security issues
 5. Write each finding via `add_review_finding` MCP tool
@@ -42,4 +44,4 @@ For each issue found, call `add_review_finding` with:
 - Focus on exploitable vulnerabilities, not theoretical risks
 - Consider the deployment context (internal tool vs public-facing)
 - Do NOT modify any code — only analyze and write findings
-- If no issues found, write a finding with text "LGTM — no security issues found"
+- If no issues found — do NOT create any findings
