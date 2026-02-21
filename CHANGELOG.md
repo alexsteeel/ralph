@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- **ralph-cli: Codex plan review in `ralph plan`** (#25)
+  - Automatic plan verification via Codex CLI after user approves plan in `ralph plan`
+  - `run_codex_plan_review()` runs Codex as subprocess with stdout streaming and timeout handling
+  - `_check_plan_lgtm()` queries Neo4j structured findings (review_type="plan") for open issues
+  - `_build_codex_plan_prompt()` generates Codex prompt for MCP-based plan validation
+  - New setting: `codex_plan_review_enabled` (default: True)
+  - Graceful degradation: skips if Codex not in PATH or review disabled
+  - 21 new tests in `test_plan_codex.py`, 124 total passing
 - **ralph-cli: new implement pipeline with iterative review chain** (#16)
   - New `review_chain.py` module — orchestrates 5 review phases after main implementation
   - Phase pipeline: Code Review (4 parallel agents) → Simplifier → Security → Codex → Finalization

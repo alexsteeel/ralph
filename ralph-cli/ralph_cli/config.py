@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Codex review settings
     codex_review_max_iterations: int = 3
     codex_review_model: str = "gpt-5.3-codex"
+    codex_plan_review_enabled: bool = True
 
     # Paths
     log_dir: Path = Field(default=Path.home() / ".claude/logs")
