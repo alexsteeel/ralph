@@ -1158,7 +1158,6 @@
             <div class="modal-tabs">
                 <button class="modal-tab active" data-tab="body">Description</button>
                 <button class="modal-tab" data-tab="plan">Plan</button>
-                <button class="modal-tab" data-tab="review">Review</button>
                 <button class="modal-tab" data-tab="report">Report</button>
                 <button class="modal-tab" data-tab="blocks">Blocks</button>
             </div>
@@ -1226,7 +1225,7 @@
         const btnFullscreen = document.getElementById('btn-fullscreen');
         const tabs = document.querySelectorAll('.modal-tab');
 
-        let currentData = { body: '', plan: '', report: '', review: '', blocks: '' };
+        let currentData = { body: '', plan: '', report: '', blocks: '' };
         let currentTab = 'body';
         let currentTask = { project: '', number: 0, description: '', started: '', completed: '', status: 'todo', module: '' };
         let isEditing = false;
@@ -1293,7 +1292,7 @@
             }
         }
 
-        function openModal(title, body, plan, report, review, blocks, project, number, started, completed, status, module, initialTab = 'body') {
+        function openModal(title, body, plan, report, blocks, project, number, started, completed, status, module, initialTab = 'body') {
             const match = title.match(/^#(\d+)\s+(.*)$/);
             const description = match ? match[2] : title;
             originalDescription = description;
@@ -1322,7 +1321,7 @@
                 modalDates.appendChild(completeSpan);
             }
 
-            currentData = { body: body || '', plan: plan || '', report: report || '', review: review || '', blocks: blocks || '' };
+            currentData = { body: body || '', plan: plan || '', report: report || '', blocks: blocks || '' };
             currentTask = { project, number, description, started: started || '', completed: completed || '', status: status || 'todo', module: module || '' };
             currentTab = initialTab;
             isEditing = false;
@@ -1338,7 +1337,7 @@
             if (isEditing) {
                 modalEditor.value = currentData[tab];
             } else {
-                const labels = { body: 'description', plan: 'plan', report: 'report', review: 'review', blocks: 'blocks' };
+                const labels = { body: 'description', plan: 'plan', report: 'report', blocks: 'blocks' };
                 const content = currentData[tab] || `_No ${labels[tab]}_`;
                 modalBody.innerHTML = marked.parse(content);
             }
@@ -1408,7 +1407,6 @@
                 body: currentData.body,
                 plan: currentData.plan,
                 report: currentData.report,
-                review: currentData.review,
                 blocks: currentData.blocks
             };
 
@@ -1434,7 +1432,6 @@
                         card.dataset.body = currentData.body;
                         card.dataset.plan = currentData.plan;
                         card.dataset.report = currentData.report;
-                        card.dataset.review = currentData.review;
                         card.dataset.blocks = currentData.blocks;
                         if (payload.description) {
                             card.dataset.title = `#${currentTask.number} ${newDescription}`;
@@ -1543,7 +1540,6 @@
                 card.dataset.body,
                 card.dataset.plan,
                 card.dataset.report,
-                card.dataset.review,
                 card.dataset.blocks || '',
                 card.dataset.project,
                 parseInt(card.dataset.number),
@@ -1590,7 +1586,6 @@
                         body: data.body || '',
                         plan: data.plan || '',
                         report: data.report || '',
-                        review: data.review || '',
                         blocks: data.blocks || ''
                     };
                     currentTask.description = data.description;
@@ -1626,7 +1621,6 @@
                         card.dataset.body = currentData.body;
                         card.dataset.plan = currentData.plan;
                         card.dataset.report = currentData.report;
-                        card.dataset.review = currentData.review;
                         card.dataset.blocks = currentData.blocks;
                         card.dataset.title = `#${currentTask.number} ${currentTask.description}`;
                         card.dataset.status = currentTask.status;
@@ -1744,11 +1738,10 @@
                 const body = card.dataset.body || '';
                 const plan = card.dataset.plan || '';
                 const report = card.dataset.report || '';
-                const review = card.dataset.review || '';
                 const blocks = card.dataset.blocks || '';
                 const module = card.dataset.module || '';
 
-                const searchText = `#${number} ${title} ${body} ${plan} ${report} ${review} ${blocks} ${module}`.toLowerCase();
+                const searchText = `#${number} ${title} ${body} ${plan} ${report} ${blocks} ${module}`.toLowerCase();
 
                 if (searchText.includes(q)) {
                     card.classList.remove('hidden');

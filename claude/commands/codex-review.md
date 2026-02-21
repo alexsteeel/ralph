@@ -63,7 +63,7 @@ codex review \
 2. Прочитай CLAUDE.md в директории тестов для получения URL и credentials тестового сервера
 3. Проанализируй незакоммиченные изменения (git diff, git status) на соответствие ТЗ
 4. Если есть frontend изменения — ОБЯЗАТЕЛЬНО проверь UI через playwright MCP
-5. ДОБАВЬ результаты к существующему Review: update_task(project, number, review=existing_review + new_review)
+5. Для КАЖДОГО замечания вызови: add_review_finding(project, number, review_type='codex-review', text='описание', author='codex', file='path', line_start=N, line_end=M)
 
 ## UI Verification (ОБЯЗАТЕЛЬНО для frontend)
 
@@ -71,7 +71,7 @@ codex review \
 1. Найди и прочитай CLAUDE.md в директории тестов затронутого сервиса для URL и credentials
 2. Используй playwright MCP: browser_navigate → browser_screenshot
 3. Проверь что UI отображается корректно
-4. Добавь результат проверки в Review
+4. Для UI проблем — вызови add_review_finding с review_type='codex-review'
 
 ## Что проверять
 
@@ -235,8 +235,8 @@ codex review \
 ## Важно
 
 - НЕ ИЗМЕНЯЙ КОД — только анализируй
-- Результаты ДОБАВЛЯЙ к существующему Review (append, не replace)
-- Если нет замечаний — напиши 'NO ISSUES FOUND'
+- Для каждого замечания используй add_review_finding (не update_task review=)
+- Если нет замечаний — НЕ создавай findings
 " 2>&1 | tee "$LOG_FILE"
 
 # Проверь exit code
@@ -265,11 +265,11 @@ fi
 
 1. **Получи обновлённую задачу** через `mcp__md-task-mcp__tasks(project, number)`
 
-2. **ОБЯЗАТЕЛЬНО проверь наличие секции Review**:
-   - Секция должна содержать результаты от Codex (формат "## Code Review - Iteration N")
-   - Должен быть Summary с количеством issues
+2. **ОБЯЗАТЕЛЬНО проверь наличие findings**:
+   - Используй `list_review_findings(project, number, review_type="codex-review")` для проверки
+   - Findings должны быть добавлены Codex через `add_review_finding`
 
-3. **Если секция Review отсутствует или пустая:**
+3. **Если findings не появились:**
    - Codex НЕ выполнил свою задачу
    - **КРИТИЧЕСКАЯ ОШИБКА** → сообщи пользователю
    - Прочитай лог `$LOG_FILE` для диагностики
@@ -323,24 +323,25 @@ codex review \
   "
 Это повторная проверка после исправлений (итерация $ITERATION) для задачи {{task_ref}}.
 
-1. Получи текущий Review из задачи через md-task-mcp
+1. Получи текущие findings через list_review_findings(project, number, review_type='codex-review')
 2. Проверь ТОЛЬКО незакоммиченные изменения (git diff, git status) что предыдущие замечания исправлены
 3. Проверь что исправления не внесли новых проблем
-4. ДОПОЛНИ Review в задаче новыми замечаниями или статусом
+4. Для исправленных findings вызови resolve_finding(finding_id)
+5. Для новых проблем вызови add_review_finding(review_type='codex-review')
 
-Если всё исправлено — добавь в Review: '## Iteration $ITERATION: ALL ISSUES RESOLVED'
-Если есть новые проблемы — добавь их в том же формате с заголовком '## Iteration $ITERATION'
+Если всё исправлено — resolve все open findings.
+Если есть новые проблемы — добавь через add_review_finding.
 " 2>&1 | tee "${REVIEW_DIR}/${TASK_SAFE}_codex-review-iter${ITERATION}_${TIMESTAMP}.log"
 ```
 
 **Повторяй итерации** пока:
-- Codex не напишет "ALL ISSUES RESOLVED"
+- Все findings resolved
 - Или не останется только LOW замечания
 - Максимум 3 итерации (после — спроси пользователя)
 
 ## Phase 6: Finalize Review
 
-После завершения всех итераций добавь в Review финальный статус через `mcp__md-task-mcp__update_task`:
+После завершения всех итераций проверь финальное состояние findings:
 
 ```markdown
 ## Final Review Status

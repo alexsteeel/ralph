@@ -15,33 +15,24 @@ from pathlib import Path
 from fastmcp import FastMCP
 from starlette.applications import Starlette
 
+from .core import add_review_finding as _add_review_finding
 from .core import (
     copy_attachment,
     get_attachment_bytes,
     normalize_project_name,
     project_exists,
 )
-from .core import (
-    create_task as _create_task,
-)
-from .core import (
-    delete_attachment as _delete_attachment,
-)
-from .core import (
-    get_task as _get_task,
-)
-from .core import (
-    list_attachments as _list_attachments,
-)
-from .core import (
-    list_projects as _list_projects,
-)
-from .core import (
-    list_tasks as _list_tasks,
-)
-from .core import (
-    update_task as _update_task,
-)
+from .core import create_task as _create_task
+from .core import decline_finding as _decline_finding
+from .core import delete_attachment as _delete_attachment
+from .core import get_task as _get_task
+from .core import list_attachments as _list_attachments
+from .core import list_projects as _list_projects
+from .core import list_review_findings as _list_review_findings
+from .core import list_tasks as _list_tasks
+from .core import reply_to_finding as _reply_to_finding
+from .core import resolve_finding as _resolve_finding
+from .core import update_task as _update_task
 
 mcp = FastMCP("ralph-tasks")
 
@@ -152,7 +143,6 @@ def update_task(
     plan: str | None = None,
     body: str | None = None,
     report: str | None = None,
-    review: str | None = None,
     branch: str | None = None,
     started: str | None = None,
     completed: str | None = None,
@@ -170,7 +160,6 @@ def update_task(
         plan: New implementation plan content
         body: New detailed description
         report: Task completion report
-        review: Code review feedback
         branch: Git branch name
         started: Started datetime (YYYY-MM-DD HH:MM)
         completed: Completed datetime (YYYY-MM-DD HH:MM)
@@ -188,7 +177,6 @@ def update_task(
             "plan": plan,
             "body": body,
             "report": report,
-            "review": review,
             "branch": branch,
             "started": started,
             "completed": completed,
@@ -199,6 +187,130 @@ def update_task(
 
     task = _update_task(project, number, **fields)
     return task.to_dict()
+
+
+# =============================================================================
+# Review Finding tools
+# =============================================================================
+
+
+@mcp.tool
+def add_review_finding(
+    project: str,
+    number: int,
+    review_type: str,
+    text: str,
+    author: str,
+    file: str | None = None,
+    line_start: int | None = None,
+    line_end: int | None = None,
+) -> dict:
+    """
+    Add a review finding to a task.
+
+    Creates the review Section automatically if it doesn't exist.
+
+    Args:
+        project: Project name
+        number: Task number
+        review_type: Review type (arbitrary string, e.g. "code-review", "security")
+        text: Finding description
+        author: Who found it (agent/skill name)
+        file: Optional file path
+        line_start: Optional start line number
+        line_end: Optional end line number
+
+    Returns:
+        Created finding with element_id
+    """
+    return _add_review_finding(
+        project,
+        number,
+        review_type,
+        text,
+        author,
+        file=file,
+        line_start=line_start,
+        line_end=line_end,
+    )
+
+
+@mcp.tool
+def list_review_findings(
+    project: str,
+    number: int,
+    review_type: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    """
+    List review findings with comment threads.
+
+    Args:
+        project: Project name
+        number: Task number
+        review_type: Optional filter by review type
+        status: Optional filter by status (open/resolved/declined)
+
+    Returns:
+        List of findings with nested comments
+    """
+    return _list_review_findings(project, number, review_type=review_type, status=status)
+
+
+@mcp.tool
+def reply_to_finding(
+    finding_id: str,
+    text: str,
+    author: str,
+) -> dict:
+    """
+    Add a comment to a finding.
+
+    Args:
+        finding_id: Finding element_id
+        text: Comment text
+        author: Comment author
+
+    Returns:
+        Created comment with element_id
+    """
+    return _reply_to_finding(finding_id, text, author)
+
+
+@mcp.tool
+def resolve_finding(
+    finding_id: str,
+    response: str | None = None,
+) -> dict:
+    """
+    Mark a finding as resolved.
+
+    Args:
+        finding_id: Finding element_id
+        response: Optional description of what was done
+
+    Returns:
+        Updated finding
+    """
+    return _resolve_finding(finding_id, response=response)
+
+
+@mcp.tool
+def decline_finding(
+    finding_id: str,
+    reason: str,
+) -> dict:
+    """
+    Mark a finding as declined.
+
+    Args:
+        finding_id: Finding element_id
+        reason: Mandatory reason for declining
+
+    Returns:
+        Updated finding
+    """
+    return _decline_finding(finding_id, reason)
 
 
 # =============================================================================

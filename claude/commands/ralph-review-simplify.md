@@ -22,20 +22,25 @@ Task(subagent_type="code-simplifier:code-simplifier",
      prompt=task_context, model="opus")
 ```
 
-## 3. ОБЯЗАТЕЛЬНО сохрани в review поле
+## 3. ОБЯЗАТЕЛЬНО сохрани как structured findings
+
+Для КАЖДОГО замечания вызови:
 
 ```
-mcp__md-task-mcp__update_task(
+add_review_finding(
     project=project,
     number=number,
-    review=existing_review + "\n\n---\n\n### Code Simplifier\n\n" + results
+    review_type="code-simplifier",
+    text="<описание замечания>",
+    author="code-simplifier",
+    file="<path/to/file>",       # если применимо
+    line_start=<N>,              # если применимо
+    line_end=<M>                 # если применимо
 )
 ```
-
-**НЕ записывай в blocks!** Только в `review` поле.
 
 ## 4. Верни статус
 
 ```
-✅ Code Simplifier записан: {project}#{number} — N замечаний
+✅ Code Simplifier записан: {project}#{number} — N findings добавлено
 ```

@@ -645,7 +645,9 @@ def create_finding(
     section_type: str,
     text: str,
     author: str,
-    severity: str | None = None,
+    file: str | None = None,
+    line_start: int | None = None,
+    line_end: int | None = None,
 ) -> dict:
     now = _now()
     props: dict[str, Any] = {
@@ -654,13 +656,15 @@ def create_finding(
         "author": author,
         "created_at": now,
     }
-    if severity:
-        props["severity"] = severity
+    for key, val in [("file", file), ("line_start", line_start), ("line_end", line_end)]:
+        if val is not None:
+            props[key] = val
 
     result = session.run(
         """
         MATCH (p:Project {name: $project})-[:HAS_TASK]->(t:Task {number: $number})
-              -[:HAS_SECTION]->(s:Section {type: $section_type})
+        MERGE (t)-[:HAS_SECTION]->(s:Section {type: $section_type})
+        ON CREATE SET s.content = '', s.created_at = $now, s.updated_at = $now
         CREATE (s)-[:HAS_FINDING]->(f:Finding $props)
         RETURN f {.*} AS finding, elementId(f) AS finding_id
         """,
@@ -668,22 +672,47 @@ def create_finding(
         number=task_number,
         section_type=section_type,
         props=props,
+        now=now,
     )
     record = result.single()
     if record is None:
-        raise ValueError(f"Section '{section_type}' not found for task #{task_number}")
+        raise ValueError(f"Task #{task_number} not found in project '{project_name}'")
     finding = dict(record["finding"])
     finding["element_id"] = record["finding_id"]
     return finding
 
 
-def update_finding_status(session: Session, element_id: str, status: str) -> dict:
+_VALID_FINDING_STATUSES = frozenset({"open", "resolved", "declined"})
+
+
+def update_finding_status(
+    session: Session,
+    element_id: str,
+    status: str,
+    reason: str | None = None,
+    response: str | None = None,
+) -> dict:
+    if status not in _VALID_FINDING_STATUSES:
+        raise ValueError(
+            f"Invalid finding status '{status}'. Must be one of: {', '.join(sorted(_VALID_FINDING_STATUSES))}"
+        )
+    if status == "declined" and not reason:
+        raise ValueError("reason is required when declining a finding")
+
     now = _now()
     params: dict[str, Any] = {"eid": element_id, "status": status}
     set_clause = "SET f.status = $status"
+
     if status == "resolved":
         set_clause += ", f.resolved_at = $now"
         params["now"] = now
+        if response is not None:
+            set_clause += ", f.response = $response"
+            params["response"] = response
+    elif status == "declined":
+        set_clause += ", f.declined_at = $now, f.decline_reason = $reason"
+        params["now"] = now
+        params["reason"] = reason
 
     result = session.run(
         f"""
@@ -699,6 +728,25 @@ def update_finding_status(session: Session, element_id: str, status: str) -> dic
     return dict(record["finding"])
 
 
+def _finding_filter_clause(
+    project_name: str,
+    task_number: int,
+    section_type: str | None = None,
+    status: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Build WHERE clause and params for finding queries."""
+    params: dict[str, Any] = {"project": project_name, "number": task_number}
+    where_clauses = []
+    if section_type:
+        where_clauses.append("s.type = $section_type")
+        params["section_type"] = section_type
+    if status:
+        where_clauses.append("f.status = $status")
+        params["status"] = status
+    where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    return where, params
+
+
 def list_findings(
     session: Session,
     project_name: str,
@@ -706,17 +754,7 @@ def list_findings(
     section_type: str | None = None,
     status: str | None = None,
 ) -> list[dict]:
-    where_clauses = []
-    params: dict[str, Any] = {"project": project_name, "number": task_number}
-
-    if section_type:
-        where_clauses.append("s.type = $section_type")
-        params["section_type"] = section_type
-    if status:
-        where_clauses.append("f.status = $status")
-        params["status"] = status
-
-    where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    where, params = _finding_filter_clause(project_name, task_number, section_type, status)
 
     result = session.run(
         f"""
@@ -733,6 +771,57 @@ def list_findings(
         f = dict(r["finding"])
         f["element_id"] = r["finding_id"]
         f["section_type"] = r["section_type"]
+        findings.append(f)
+    return findings
+
+
+def list_findings_with_comments(
+    session: Session,
+    project_name: str,
+    task_number: int,
+    section_type: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    """List findings with their comment threads.
+
+    Returns findings enriched with a ``comments`` list. Each comment
+    includes its own ``replies`` list for threaded discussion.
+    """
+    where, params = _finding_filter_clause(project_name, task_number, section_type, status)
+
+    result = session.run(
+        f"""
+        MATCH (p:Project {{name: $project}})-[:HAS_TASK]->(t:Task {{number: $number}})
+              -[:HAS_SECTION]->(s:Section)-[:HAS_FINDING]->(f:Finding)
+        {where}
+        OPTIONAL MATCH (f)-[:HAS_COMMENT]->(c:Comment)
+        OPTIONAL MATCH (c)-[:REPLIED_BY]->(r:Comment)
+        WITH f, s, c,
+             collect(DISTINCT CASE WHEN r IS NOT NULL THEN {{
+                 text: r.text, author: r.author, created_at: r.created_at,
+                 element_id: elementId(r)
+             }} END) AS raw_replies
+        WITH f, s,
+             collect(DISTINCT CASE WHEN c IS NOT NULL THEN {{
+                 text: c.text, author: c.author, created_at: c.created_at,
+                 element_id: elementId(c),
+                 replies: raw_replies
+             }} END) AS raw_comments
+        RETURN f {{.*}} AS finding, elementId(f) AS finding_id,
+               s.type AS section_type, raw_comments
+        ORDER BY f.created_at
+        """,
+        **params,
+    )
+    findings = []
+    for r in result:
+        f = dict(r["finding"])
+        f["element_id"] = r["finding_id"]
+        f["section_type"] = r["section_type"]
+        comments = [c for c in r["raw_comments"] if c is not None and c.get("text") is not None]
+        for c in comments:
+            c["replies"] = [rp for rp in (c.get("replies") or []) if rp is not None]
+        f["comments"] = comments
         findings.append(f)
     return findings
 

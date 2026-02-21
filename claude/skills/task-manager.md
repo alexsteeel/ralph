@@ -98,7 +98,6 @@ update_task(
     body="Updated description",
     plan="Updated plan",
     report="Work completed",
-    review="LGTM",
     blocks="Waiting for API spec",
     depends_on=[2, 3]
 )
@@ -106,7 +105,7 @@ update_task(
 
 ### Multiline Text
 
-Use real line breaks for multiline content in `body`, `plan`, `report`, `review`, `blocks`:
+Use real line breaks for multiline content in `body`, `plan`, `report`, `blocks`:
 
 ```
 update_task(

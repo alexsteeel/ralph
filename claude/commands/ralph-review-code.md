@@ -25,22 +25,32 @@ Task ref: `$ARGUMENTS`
 - `pr-review-toolkit:pr-test-analyzer`
 - `pr-review-toolkit:comment-analyzer`
 
-## 3. ОБЯЗАТЕЛЬНО сохрани в review поле
+## 3. ОБЯЗАТЕЛЬНО сохрани как structured findings
 
-После получения результатов от всех агентов, **ОБЯЗАТЕЛЬНО** вызови:
+После получения результатов от всех агентов, для КАЖДОГО замечания вызови:
 
 ```
-mcp__md-task-mcp__update_task(
+add_review_finding(
     project=project,
     number=number,
-    review=existing_review + "\n\n---\n\n### Code Review (5 agents)\n\n" + formatted_results
+    review_type="<agent-type>",  # e.g. "code-review", "silent-failure", "type-design", "test-coverage", "comment-analysis"
+    text="<описание замечания>",
+    author="<agent-name>",
+    file="<path/to/file>",       # если применимо
+    line_start=<N>,              # если применимо
+    line_end=<M>                 # если применимо
 )
 ```
 
-**НЕ записывай в blocks!** Только в `review` поле.
+**review_type по агентам:**
+- `pr-review-toolkit:code-reviewer` → `"code-review"`
+- `pr-review-toolkit:silent-failure-hunter` → `"silent-failure"`
+- `pr-review-toolkit:type-design-analyzer` → `"type-design"`
+- `pr-review-toolkit:pr-test-analyzer` → `"test-coverage"`
+- `pr-review-toolkit:comment-analyzer` → `"comment-analysis"`
 
 ## 4. Верни статус
 
 ```
-✅ Code Review записан: {project}#{number} — N замечаний
+✅ Code Review записан: {project}#{number} — N findings добавлено
 ```

@@ -42,7 +42,8 @@ class TestFullTaskLifecycle:
             "code-review",
             "Missing error handling",
             "code-reviewer",
-            severity="major",
+            file="src/main.py",
+            line_start=42,
         )
         assert f1["status"] == "open"
 

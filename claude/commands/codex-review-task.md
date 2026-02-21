@@ -25,7 +25,7 @@ which codex || { echo "ERROR: codex not found"; exit 1; }
 ## 2. Получи задачу
 
 Используй `mcp__md-task-mcp__tasks(project, number)` чтобы получить task.
-Запомни текущее содержимое `review` поля.
+Запомни текущие findings через `list_review_findings`.
 
 ## 3. Запусти codex review НАПРЯМУЮ
 
@@ -48,11 +48,10 @@ codex review \
 2. Прочитай CLAUDE.md в директории тестов для получения URL и credentials
 3. Проанализируй незакоммиченные изменения на соответствие ТЗ
 4. Если есть frontend изменения — проверь UI через playwright MCP
-5. ДОБАВЬ результаты к существующему Review: update_task(project, number, review=existing + new)
+5. Для КАЖДОГО замечания вызови add_review_finding(project, number, review_type='codex-review', text='описание', author='codex', file='path', line_start=N)
 
-Формат замечаний: Severity (CRITICAL/HIGH/MEDIUM/LOW), File, Line, Issue.
-НЕ ИЗМЕНЯЙ КОД. Результаты ДОБАВЛЯЙ к существующему Review (append).
-Если нет замечаний — 'NO ISSUES FOUND'.
+НЕ ИЗМЕНЯЙ КОД. Используй add_review_finding для каждого замечания.
+Если нет замечаний — НЕ создавай findings.
 " 2>&1 | tee "$LOG_FILE"
 ```
 
@@ -60,10 +59,10 @@ codex review \
 
 ## 4. Проверь результат
 
-Получи обновлённую задачу через `mcp__md-task-mcp__tasks(project, number)`.
-Убедись что в review поле появились результаты от Codex.
+Проверь findings через `list_review_findings(project, number, review_type="codex-review")`.
+Убедись что Codex добавил findings.
 
-**Если review не обновился** — codex не выполнил задачу. Сообщи ошибку, прочитай лог.
+**Если findings не появились** — codex не выполнил задачу. Сообщи ошибку, прочитай лог.
 
 ## 5. Верни статус
 

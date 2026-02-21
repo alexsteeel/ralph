@@ -21,13 +21,12 @@
         </div>
         <div class="kanban-tasks">
             {% for t in board.todo %}
-            <div class="kanban-card status-todo" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-review="{{ t.review }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="todo" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
+            <div class="kanban-card status-todo" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="todo" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
                 <div class="kanban-card-num">#{{ t.number }}{% if t.branch %}<span class="branch-badge">{{ t.branch }}</span>{% endif %}{% if t.module %}<span class="module-badge">{{ t.module }}</span>{% endif %}</div>
                 <div class="kanban-card-title">{{ t.description }}</div>
                 <div class="section-icons">
                     <span class="section-icon {{ 'has-content' if t.body else '' }}" title="Description">D</span>
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
-                    <span class="section-icon {{ 'has-content' if t.review else '' }}" title="Review">RV</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
                 </div>
@@ -59,13 +58,12 @@
         </div>
         <div class="kanban-tasks">
             {% for t in board.hold %}
-            <div class="kanban-card status-hold" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-review="{{ t.review }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="hold" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
+            <div class="kanban-card status-hold" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="hold" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
                 <div class="kanban-card-num">#{{ t.number }}{% if t.branch %}<span class="branch-badge">{{ t.branch }}</span>{% endif %}{% if t.module %}<span class="module-badge">{{ t.module }}</span>{% endif %}</div>
                 <div class="kanban-card-title">{{ t.description }}</div>
                 <div class="section-icons">
                     <span class="section-icon {{ 'has-content' if t.body else '' }}" title="Description">D</span>
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
-                    <span class="section-icon {{ 'has-content' if t.review else '' }}" title="Review">RV</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
                 </div>
@@ -97,13 +95,12 @@
         </div>
         <div class="kanban-tasks">
             {% for t in board.work %}
-            <div class="kanban-card status-work" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-review="{{ t.review }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="work" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
+            <div class="kanban-card status-work" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="work" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
                 <div class="kanban-card-num">#{{ t.number }}{% if t.branch %}<span class="branch-badge">{{ t.branch }}</span>{% endif %}{% if t.module %}<span class="module-badge">{{ t.module }}</span>{% endif %}</div>
                 <div class="kanban-card-title">{{ t.description }}</div>
                 <div class="section-icons">
                     <span class="section-icon {{ 'has-content' if t.body else '' }}" title="Description">D</span>
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
-                    <span class="section-icon {{ 'has-content' if t.review else '' }}" title="Review">RV</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
                 </div>
@@ -135,13 +132,12 @@
         </div>
         <div class="kanban-tasks">
             {% for t in board.done %}
-            <div class="kanban-card status-done" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-review="{{ t.review }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="done" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
+            <div class="kanban-card status-done" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="done" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
                 <div class="kanban-card-num">#{{ t.number }}{% if t.branch %}<span class="branch-badge">{{ t.branch }}</span>{% endif %}{% if t.module %}<span class="module-badge">{{ t.module }}</span>{% endif %}</div>
                 <div class="kanban-card-title">{{ t.description }}</div>
                 <div class="section-icons">
                     <span class="section-icon {{ 'has-content' if t.body else '' }}" title="Description">D</span>
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
-                    <span class="section-icon {{ 'has-content' if t.review else '' }}" title="Review">RV</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
                 </div>
@@ -173,13 +169,12 @@
         </div>
         <div class="kanban-tasks">
             {% for t in board.approved %}
-            <div class="kanban-card status-approved" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-review="{{ t.review }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="approved" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
+            <div class="kanban-card status-approved" data-body="{{ t.body }}" data-plan="{{ t.plan }}" data-report="{{ t.report }}" data-blocks="{{ t.blocks }}" data-title="#{{ t.number }} {{ t.description }}" data-project="{{ project }}" data-number="{{ t.number }}" data-status="approved" data-started="{{ t.started or '' }}" data-completed="{{ t.completed or '' }}" data-module="{{ t.module or '' }}">
                 <div class="kanban-card-num">#{{ t.number }}{% if t.branch %}<span class="branch-badge">{{ t.branch }}</span>{% endif %}{% if t.module %}<span class="module-badge">{{ t.module }}</span>{% endif %}</div>
                 <div class="kanban-card-title">{{ t.description }}</div>
                 <div class="section-icons">
                     <span class="section-icon {{ 'has-content' if t.body else '' }}" title="Description">D</span>
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
-                    <span class="section-icon {{ 'has-content' if t.review else '' }}" title="Review">RV</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
                 </div>

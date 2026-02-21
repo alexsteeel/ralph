@@ -257,7 +257,7 @@ class TestSectionCRUD:
 
 @pytest.mark.neo4j
 class TestFindingCRUD:
-    def test_create_finding(self, neo4j_session):
+    def test_create_finding_without_file(self, neo4j_session):
         crud.create_workspace(neo4j_session, "ws")
         crud.create_project(neo4j_session, "ws", "proj")
         crud.create_task(neo4j_session, "proj", "Task")
@@ -269,14 +269,14 @@ class TestFindingCRUD:
             "code-review",
             text="Missing null check",
             author="reviewer",
-            severity="major",
         )
         assert finding["text"] == "Missing null check"
         assert finding["status"] == "open"
-        assert finding["severity"] == "major"
+        assert finding["author"] == "reviewer"
         assert "element_id" in finding
+        assert "file" not in finding
 
-    def test_update_finding_status(self, neo4j_session):
+    def test_create_finding_with_file(self, neo4j_session):
         crud.create_workspace(neo4j_session, "ws")
         crud.create_project(neo4j_session, "ws", "proj")
         crud.create_task(neo4j_session, "proj", "Task")
@@ -286,12 +286,118 @@ class TestFindingCRUD:
             "proj",
             1,
             "code-review",
-            text="Bug",
-            author="reviewer",
+            text="SQL injection risk",
+            author="security-agent",
+            file="src/db.py",
+            line_start=42,
+            line_end=45,
         )
-        updated = crud.update_finding_status(neo4j_session, finding["element_id"], "resolved")
+        assert finding["file"] == "src/db.py"
+        assert finding["line_start"] == 42
+        assert finding["line_end"] == 45
+
+    def test_create_finding_auto_creates_section(self, neo4j_session):
+        """create_finding with MERGE should auto-create Section if missing."""
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        # No explicit create_section call
+        finding = crud.create_finding(
+            neo4j_session,
+            "proj",
+            1,
+            "security",
+            "Issue",
+            "agent",
+        )
+        assert finding["text"] == "Issue"
+        # Section should now exist
+        section = crud.get_section(neo4j_session, "proj", 1, "security")
+        assert section is not None
+        assert section["type"] == "security"
+
+    def test_update_finding_status_resolved(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        crud.create_section(neo4j_session, "proj", 1, "code-review")
+        finding = crud.create_finding(
+            neo4j_session,
+            "proj",
+            1,
+            "code-review",
+            "Bug",
+            "reviewer",
+        )
+        updated = crud.update_finding_status(
+            neo4j_session,
+            finding["element_id"],
+            "resolved",
+            response="Fixed in commit abc",
+        )
         assert updated["status"] == "resolved"
         assert "resolved_at" in updated
+        assert updated["response"] == "Fixed in commit abc"
+
+    def test_update_finding_status_resolved_no_response(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        finding = crud.create_finding(
+            neo4j_session,
+            "proj",
+            1,
+            "code-review",
+            "Minor issue",
+            "rev",
+        )
+        updated = crud.update_finding_status(
+            neo4j_session,
+            finding["element_id"],
+            "resolved",
+        )
+        assert updated["status"] == "resolved"
+
+    def test_update_finding_status_declined(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        finding = crud.create_finding(
+            neo4j_session,
+            "proj",
+            1,
+            "code-review",
+            "Not a bug",
+            "reviewer",
+        )
+        updated = crud.update_finding_status(
+            neo4j_session,
+            finding["element_id"],
+            "declined",
+            reason="Working as intended",
+        )
+        assert updated["status"] == "declined"
+        assert updated["decline_reason"] == "Working as intended"
+        assert "declined_at" in updated
+
+    def test_decline_without_reason_raises(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        finding = crud.create_finding(
+            neo4j_session,
+            "proj",
+            1,
+            "code-review",
+            "Issue",
+            "reviewer",
+        )
+        with pytest.raises(ValueError, match="reason is required"):
+            crud.update_finding_status(
+                neo4j_session,
+                finding["element_id"],
+                "declined",
+            )
 
     def test_list_findings(self, neo4j_session):
         crud.create_workspace(neo4j_session, "ws")
@@ -314,6 +420,31 @@ class TestFindingCRUD:
         open_findings = crud.list_findings(neo4j_session, "proj", 1, status="open")
         assert len(open_findings) == 1
         assert open_findings[0]["text"] == "F2"
+
+    def test_list_findings_with_comments(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        crud.create_section(neo4j_session, "proj", 1, "code-review")
+        f = crud.create_finding(neo4j_session, "proj", 1, "code-review", "Issue", "rev")
+        crud.create_comment(neo4j_session, f["element_id"], "Fixing now", "dev")
+        findings = crud.list_findings_with_comments(neo4j_session, "proj", 1)
+        assert len(findings) == 1
+        assert findings[0]["text"] == "Issue"
+        assert len(findings[0]["comments"]) == 1
+        assert findings[0]["comments"][0]["text"] == "Fixing now"
+
+    def test_repeated_review_adds_findings(self, neo4j_session):
+        """New findings are added without removing old ones."""
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task")
+        crud.create_section(neo4j_session, "proj", 1, "code-review")
+        crud.create_finding(neo4j_session, "proj", 1, "code-review", "First run issue", "rev")
+        # Second review run adds more findings
+        crud.create_finding(neo4j_session, "proj", 1, "code-review", "Second run issue", "rev")
+        findings = crud.list_findings(neo4j_session, "proj", 1)
+        assert len(findings) == 2
 
 
 @pytest.mark.neo4j

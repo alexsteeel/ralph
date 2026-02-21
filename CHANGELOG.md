@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+- **tasks: structured review findings — Section → Finding → Comment graph model** (#12)
+  - Replaced plain-text `review` field with structured Neo4j-backed findings
+  - New graph model: `Task -[:HAS_SECTION]→ Section -[:HAS_FINDING]→ Finding -[:HAS_COMMENT]→ Comment`
+  - Finding fields: text, author, status (open/resolved/declined), file, line_start, line_end
+  - Comment threads with replies via `REPLIED_BY` relationship
+  - 5 new MCP tools: `add_review_finding`, `list_review_findings`, `reply_to_finding`, `resolve_finding`, `decline_finding`
+  - Auto-creates review Section via MERGE on first finding
+  - Validation: finding status enum, required decline reason, two-stage Cypher aggregation
+  - Updated all review skills (ralph-review-code, security, simplify, codex-review) to use structured findings
+
 ### Fixed
 - **sandbox: `ai-sbx init update` now regenerates both `.env` and `docker-compose.override.yaml`** (#27)
   - Previously `init update` only regenerated `.env`, leaving `docker-compose.override.yaml` with stale proxy settings

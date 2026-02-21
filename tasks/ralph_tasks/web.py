@@ -183,7 +183,6 @@ class TaskUpdate(BaseModel):
     body: str | None = None
     plan: str | None = None
     report: str | None = None
-    review: str | None = None
     blocks: str | None = None
     description: str | None = None
     status: str | None = None

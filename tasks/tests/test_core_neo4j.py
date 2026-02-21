@@ -152,13 +152,11 @@ class TestUpdateTask:
             body="New body",
             plan="New plan",
             report="Report",
-            review="Review",
             blocks="Blocked",
         )
         assert updated.body == "New body"
         assert updated.plan == "New plan"
         assert updated.report == "Report"
-        assert updated.review == "Review"
         assert updated.blocks == "Blocked"
 
     def test_update_task_auto_started(self, graph_core):
@@ -403,3 +401,111 @@ class TestProjectNameMigration:
         with graph_core.session() as session:
             core._migrate_project_names(session)
         assert core.project_exists("already-good") is True
+
+
+@pytest.mark.neo4j
+class TestReviewFindings:
+    """Tests for structured review findings via core API."""
+
+    def test_add_finding_basic(self, graph_core):
+        core.create_task("proj", "Task")
+        finding = core.add_review_finding("proj", 1, "code-review", "Bug here", "reviewer-1")
+        assert finding["text"] == "Bug here"
+        assert finding["author"] == "reviewer-1"
+        assert finding["status"] == "open"
+
+    def test_add_finding_with_file(self, graph_core):
+        core.create_task("proj", "Task")
+        finding = core.add_review_finding(
+            "proj",
+            1,
+            "code-review",
+            "Issue",
+            "reviewer-1",
+            file="src/main.py",
+            line_start=10,
+            line_end=20,
+        )
+        assert finding["file"] == "src/main.py"
+        assert finding["line_start"] == 10
+        assert finding["line_end"] == 20
+
+    def test_list_findings_empty(self, graph_core):
+        core.create_task("proj", "Task")
+        findings = core.list_review_findings("proj", 1)
+        assert findings == []
+
+    def test_list_findings_with_type_filter(self, graph_core):
+        core.create_task("proj", "Task")
+        core.add_review_finding("proj", 1, "code-review", "Code issue", "r1")
+        core.add_review_finding("proj", 1, "security", "Sec issue", "r2")
+
+        code_findings = core.list_review_findings("proj", 1, review_type="code-review")
+        sec_findings = core.list_review_findings("proj", 1, review_type="security")
+        all_findings = core.list_review_findings("proj", 1)
+
+        assert len(code_findings) == 1
+        assert len(sec_findings) == 1
+        assert len(all_findings) == 2
+
+    def test_list_findings_with_status_filter(self, graph_core):
+        core.create_task("proj", "Task")
+        f1 = core.add_review_finding("proj", 1, "code-review", "Issue 1", "r1")
+        core.add_review_finding("proj", 1, "code-review", "Issue 2", "r1")
+        core.resolve_finding(f1["element_id"])
+
+        open_findings = core.list_review_findings("proj", 1, status="open")
+        resolved_findings = core.list_review_findings("proj", 1, status="resolved")
+
+        assert len(open_findings) == 1
+        assert len(resolved_findings) == 1
+
+    def test_reply_to_finding(self, graph_core):
+        core.create_task("proj", "Task")
+        finding = core.add_review_finding("proj", 1, "code-review", "Bug", "r1")
+        comment = core.reply_to_finding(finding["element_id"], "Fixed it", "dev-1")
+        assert comment["text"] == "Fixed it"
+        assert comment["author"] == "dev-1"
+
+    def test_resolve_finding(self, graph_core):
+        core.create_task("proj", "Task")
+        finding = core.add_review_finding("proj", 1, "code-review", "Bug", "r1")
+        resolved = core.resolve_finding(finding["element_id"], response="Done")
+        assert resolved["status"] == "resolved"
+        assert resolved["response"] == "Done"
+
+    def test_resolve_finding_no_response(self, graph_core):
+        core.create_task("proj", "Task")
+        finding = core.add_review_finding("proj", 1, "code-review", "Bug", "r1")
+        resolved = core.resolve_finding(finding["element_id"])
+        assert resolved["status"] == "resolved"
+
+    def test_decline_finding(self, graph_core):
+        core.create_task("proj", "Task")
+        finding = core.add_review_finding("proj", 1, "code-review", "Bug", "r1")
+        declined = core.decline_finding(finding["element_id"], reason="Not a bug")
+        assert declined["status"] == "declined"
+        assert declined["decline_reason"] == "Not a bug"
+
+    def test_decline_finding_without_reason_raises(self, graph_core):
+        core.create_task("proj", "Task")
+        finding = core.add_review_finding("proj", 1, "code-review", "Bug", "r1")
+        with pytest.raises(ValueError, match="reason is required"):
+            core.decline_finding(finding["element_id"], reason="")
+
+    def test_findings_with_comments_thread(self, graph_core):
+        core.create_task("proj", "Task")
+        finding = core.add_review_finding("proj", 1, "code-review", "Bug", "r1")
+        core.reply_to_finding(finding["element_id"], "Comment 1", "dev-1")
+        core.reply_to_finding(finding["element_id"], "Comment 2", "dev-2")
+
+        findings = core.list_review_findings("proj", 1)
+        assert len(findings) == 1
+        assert len(findings[0]["comments"]) == 2
+
+    def test_project_name_normalization(self, graph_core):
+        """Findings work with underscore project names."""
+        core.create_task("my-proj", "Task")
+        core.add_review_finding("my_proj", 1, "code-review", "Bug", "r1")
+        findings = core.list_review_findings("my_proj", 1)
+        assert len(findings) == 1

@@ -49,7 +49,6 @@ _SECTION_FIELDS = {
     "body": "description",
     "plan": "plan",
     "report": "report",
-    "review": "review",
     "blocks": "blocks",
 }
 
@@ -122,7 +121,6 @@ class Task:
     body: str = ""
     plan: str = ""
     report: str = ""
-    review: str = ""
     blocks: str = ""
     depends_on: list[int] = field(default_factory=list)
     updated_at: str = ""  # ISO 8601
@@ -140,7 +138,6 @@ class Task:
             "body": self.body.strip(),
             "plan": self.plan.strip(),
             "report": self.report.strip(),
-            "review": self.review.strip(),
             "blocks": self.blocks.strip(),
             "depends_on": self.depends_on,
             "mtime": _updated_at_to_timestamp(self.updated_at),
@@ -266,7 +263,6 @@ def _task_from_graph(d: dict) -> Task:
         body=d.get("section_description", ""),
         plan=d.get("section_plan", ""),
         report=d.get("section_report", ""),
-        review=d.get("section_review", ""),
         blocks=d.get("section_blocks", ""),
         depends_on=d.get("depends_on", []),
         updated_at=d.get("updated_at", ""),
@@ -470,6 +466,83 @@ def delete_task(project: str, number: int) -> bool:
             logger.warning(f"Failed to delete attachments from MinIO for {project}#{number}: {e}")
 
     return deleted
+
+
+# ---------------------------------------------------------------------------
+# Review Findings
+# ---------------------------------------------------------------------------
+
+
+def add_review_finding(
+    project: str,
+    number: int,
+    review_type: str,
+    text: str,
+    author: str,
+    file: str | None = None,
+    line_start: int | None = None,
+    line_end: int | None = None,
+) -> dict:
+    """Add a review finding to a task. Auto-creates Section if needed."""
+    project = normalize_project_name(project)
+    with _session() as session:
+        return crud.create_finding(
+            session,
+            project,
+            number,
+            review_type,
+            text,
+            author,
+            file=file,
+            line_start=line_start,
+            line_end=line_end,
+        )
+
+
+def list_review_findings(
+    project: str,
+    number: int,
+    review_type: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    """List review findings with comment threads."""
+    project = normalize_project_name(project)
+    with _session() as session:
+        return crud.list_findings_with_comments(
+            session,
+            project,
+            number,
+            section_type=review_type,
+            status=status,
+        )
+
+
+def reply_to_finding(finding_id: str, text: str, author: str) -> dict:
+    """Add a comment to a finding."""
+    with _session() as session:
+        return crud.create_comment(session, finding_id, text, author)
+
+
+def resolve_finding(finding_id: str, response: str | None = None) -> dict:
+    """Mark a finding as resolved."""
+    with _session() as session:
+        return crud.update_finding_status(
+            session,
+            finding_id,
+            "resolved",
+            response=response,
+        )
+
+
+def decline_finding(finding_id: str, reason: str) -> dict:
+    """Mark a finding as declined. Reason is required."""
+    with _session() as session:
+        return crud.update_finding_status(
+            session,
+            finding_id,
+            "declined",
+            reason=reason,
+        )
 
 
 # ---------------------------------------------------------------------------

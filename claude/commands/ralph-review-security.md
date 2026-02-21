@@ -19,20 +19,25 @@ Task ref: `$ARGUMENTS`
 
 Выполни `/security-review` на uncommitted changes в репозитории.
 
-## 3. ОБЯЗАТЕЛЬНО сохрани в review поле
+## 3. ОБЯЗАТЕЛЬНО сохрани как structured findings
+
+Для КАЖДОГО замечания вызови:
 
 ```
-mcp__md-task-mcp__update_task(
+add_review_finding(
     project=project,
     number=number,
-    review=existing_review + "\n\n---\n\n### Security Review\n\n" + results
+    review_type="security",
+    text="<описание уязвимости>",
+    author="security-reviewer",
+    file="<path/to/file>",       # если применимо
+    line_start=<N>,              # если применимо
+    line_end=<M>                 # если применимо
 )
 ```
-
-**НЕ записывай в blocks!** Только в `review` поле.
 
 ## 4. Верни статус
 
 ```
-✅ Security Review записан: {project}#{number} — N уязвимостей
+✅ Security Review записан: {project}#{number} — N findings добавлено
 ```
