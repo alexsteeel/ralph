@@ -718,14 +718,16 @@ def update_finding_status(
         f"""
         MATCH (f:Finding) WHERE elementId(f) = $eid
         {set_clause}
-        RETURN f {{.*}} AS finding
+        RETURN f {{.*}} AS finding, elementId(f) AS finding_id
         """,
         **params,
     )
     record = result.single()
     if record is None:
         raise ValueError(f"Finding with elementId '{element_id}' not found")
-    return dict(record["finding"])
+    finding = dict(record["finding"])
+    finding["element_id"] = record["finding_id"]
+    return finding
 
 
 def _finding_filter_clause(
