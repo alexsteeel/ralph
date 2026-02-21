@@ -52,15 +52,15 @@ class ReviewPhaseResult:
     error: str | None = None
 
 
-# Code review agent definitions: (prompt_name, section_type)
+# Code review agent definitions: (agent_name, review_type, author)
 CODE_REVIEW_AGENTS = [
-    ("code-reviewer", "code-review"),
-    ("comment-analyzer", "comment-analysis"),
-    ("pr-test-analyzer", "pr-test-analysis"),
-    ("silent-failure-hunter", "silent-failure-hunting"),
+    ("code-reviewer", "code-review", "code-reviewer"),
+    ("comment-analyzer", "comment-analysis", "comment-analyzer"),
+    ("pr-test-analyzer", "pr-test-analysis", "pr-test-analyzer"),
+    ("silent-failure-hunter", "silent-failure-hunting", "silent-failure-hunter"),
 ]
 
-CODE_REVIEW_SECTION_TYPES = [section for _, section in CODE_REVIEW_AGENTS]
+CODE_REVIEW_SECTION_TYPES = [review_type for _, review_type, _ in CODE_REVIEW_AGENTS]
 
 
 def _parse_task_ref(task_ref: str) -> tuple[str, int]:
@@ -196,19 +196,24 @@ def run_fix_session(
 def run_single_review_agent(
     ctx: ReviewChainContext,
     agent_name: str,
-    section_type: str,
+    review_type: str,
+    author: str | None = None,
+    prompt_name: str = "review-agent",
 ) -> tuple[bool, str | None]:
     """Run a single review agent as a Claude session.
 
     Returns (success, session_id).
     """
+    author = author or agent_name
     try:
         prompt = load_prompt(
-            agent_name,
+            prompt_name,
             task_ref=ctx.task_ref,
             project=ctx.project,
             number=str(ctx.task_number),
             base_commit=ctx.base_commit or "",
+            review_type=review_type,
+            author=author,
         )
     except FileNotFoundError as e:
         logger.error("Prompt not found: %s", e)
@@ -236,17 +241,19 @@ def run_single_review_agent(
 def _run_agent_with_retry(
     ctx: ReviewChainContext,
     agent_name: str,
-    section_type: str,
+    review_type: str,
+    author: str | None = None,
+    prompt_name: str = "review-agent",
 ) -> tuple[bool, str | None]:
     """Run review agent with one retry on failure."""
-    success, session_id = run_single_review_agent(ctx, agent_name, section_type)
+    success, session_id = run_single_review_agent(ctx, agent_name, review_type, author, prompt_name)
     if success:
         return True, session_id
 
     console.print(f"[yellow]Retrying {agent_name}...[/yellow]")
     with ctx._lock:
         ctx.session_log.append(f"Retrying {agent_name} after failure")
-    return run_single_review_agent(ctx, agent_name, section_type)
+    return run_single_review_agent(ctx, agent_name, review_type, author, prompt_name)
 
 
 # ---------------------------------------------------------------------------
@@ -265,15 +272,15 @@ def run_parallel_code_reviews(
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = {
-            executor.submit(_run_agent_with_retry, ctx, agent_name, section_type): (
+            executor.submit(_run_agent_with_retry, ctx, agent_name, review_type, author): (
                 agent_name,
-                section_type,
+                review_type,
             )
-            for agent_name, section_type in CODE_REVIEW_AGENTS
+            for agent_name, review_type, author in CODE_REVIEW_AGENTS
         }
 
         for future in concurrent.futures.as_completed(futures):
-            agent_name, section_type = futures[future]
+            agent_name, review_type = futures[future]
             try:
                 success, session_id = future.result()
                 results[agent_name] = (success, session_id)
@@ -289,11 +296,11 @@ def run_parallel_code_reviews(
 
 def _resume_reviewers(ctx: ReviewChainContext, iteration: int) -> None:
     """Resume each code reviewer to re-check after fixes."""
-    for agent_name, section_type in CODE_REVIEW_AGENTS:
+    for agent_name, review_type, author in CODE_REVIEW_AGENTS:
         session_id = ctx.review_session_ids.get(agent_name)
         if not session_id:
             # No session to resume — run fresh
-            success, sid = run_single_review_agent(ctx, agent_name, section_type)
+            success, sid = run_single_review_agent(ctx, agent_name, review_type, author)
             if sid:
                 ctx.review_session_ids[agent_name] = sid
             continue
@@ -437,7 +444,9 @@ def run_security_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
     ctx.session_log.append("Security review started")
 
     # Initial review
-    success, session_id = _run_agent_with_retry(ctx, "security-reviewer", "security-review")
+    success, session_id = _run_agent_with_retry(
+        ctx, "security-reviewer", "security-review", prompt_name="security-reviewer"
+    )
     ctx.review_session_ids["security-reviewer"] = session_id
 
     if not success:
@@ -484,7 +493,9 @@ def run_security_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
             if result.session_id:
                 ctx.review_session_ids["security-reviewer"] = result.session_id
         else:
-            run_single_review_agent(ctx, "security-reviewer", "security-review")
+            run_single_review_agent(
+                ctx, "security-reviewer", "security-review", prompt_name="security-reviewer"
+            )
 
     # Max iterations
     create_fixup_commit(ctx.working_dir, ctx.session_log, "security fixes")

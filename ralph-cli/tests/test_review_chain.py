@@ -206,7 +206,7 @@ class TestRunSingleReviewAgent:
             "ralph_cli.commands.review_chain.load_prompt",
             side_effect=FileNotFoundError("not found"),
         ):
-            success, sid = run_single_review_agent(ctx, "nonexistent", "none")
+            success, sid = run_single_review_agent(ctx, "nonexistent", "none", "x")
             assert success is False
             assert sid is None
             mock_run_claude.assert_not_called()
@@ -220,16 +220,18 @@ class TestRunSingleReviewAgent:
 
     @patch("ralph_cli.commands.review_chain.run_claude")
     @patch("ralph_cli.commands.review_chain.load_prompt")
-    def test_passes_base_commit_to_prompt(self, mock_load, mock_run_claude, ctx):
+    def test_passes_context_to_prompt(self, mock_load, mock_run_claude, ctx):
         mock_load.return_value = "prompt text"
         mock_run_claude.return_value = _make_result()
-        run_single_review_agent(ctx, "code-reviewer", "code-review")
+        run_single_review_agent(ctx, "code-reviewer", "code-review", "code-reviewer")
         mock_load.assert_called_once_with(
-            "code-reviewer",
+            "review-agent",
             task_ref="proj#1",
             project="proj",
             number="1",
             base_commit="abc123def456",
+            review_type="code-review",
+            author="code-reviewer",
         )
 
 
@@ -704,5 +706,5 @@ class TestConstants:
 
     def test_section_types_match_agents(self):
         assert len(CODE_REVIEW_SECTION_TYPES) == 4
-        for _, section_type in CODE_REVIEW_AGENTS:
-            assert section_type in CODE_REVIEW_SECTION_TYPES
+        for _, review_type, _ in CODE_REVIEW_AGENTS:
+            assert review_type in CODE_REVIEW_SECTION_TYPES
