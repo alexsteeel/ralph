@@ -99,16 +99,6 @@ def implement(
 
 
 @app.command()
-def review(
-    task_ref: str = typer.Argument(..., help="Task reference (e.g., project#1)"),
-):
-    """Run code reviews in isolated contexts."""
-    from .commands.review import run_review
-
-    raise typer.Exit(run_review(task_ref))
-
-
-@app.command()
 def health(
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Show detailed output"),
 ):

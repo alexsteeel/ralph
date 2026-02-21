@@ -3,6 +3,19 @@
 ## [Unreleased]
 
 ### Added
+- **ralph-cli: new implement pipeline with iterative review chain** (#16)
+  - New `review_chain.py` module — orchestrates 5 review phases after main implementation
+  - Phase pipeline: Code Review (4 parallel agents) → Simplifier → Security → Codex → Finalization
+  - Iterative fix cycle: review → check LGTM via Neo4j findings → fix (resume session) → re-review
+  - `check_lgtm()` queries Neo4j structured findings for open issues by section type
+  - ThreadPoolExecutor-based parallel code reviews with thread-safe shared state
+  - New `prompts.py` utility for loading `.md` prompt templates with variable substitution
+  - 9 prompt files for review agents (code-reviewer, security-reviewer, codex-reviewer, etc.)
+  - Prompt packaging via hatch force-include for wheel builds
+  - New settings: `claude_review_model`, `code_review_max_iterations`, `security_review_max_iterations`
+  - Updated `ralph-implement-python-task` skill: removed Phase 6 (Reviews), reviews now orchestrated externally
+  - Removed old `ralph review` CLI command (replaced by review chain)
+  - 54 new tests (49 review_chain + 5 prompts), 103 total passing
 - **tasks: structured review findings — Section → Finding → Comment graph model** (#12)
   - Replaced plain-text `review` field with structured Neo4j-backed findings
   - New graph model: `Task -[:HAS_SECTION]→ Section -[:HAS_FINDING]→ Finding -[:HAS_COMMENT]→ Comment`

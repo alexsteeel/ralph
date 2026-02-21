@@ -28,7 +28,12 @@ class Settings(BaseSettings):
     health_check_timeout: int = 60
     review_timeout: int = 1800  # 30 min
 
-    # Codex review loop settings
+    # Review chain settings
+    claude_review_model: str = "sonnet"
+    code_review_max_iterations: int = 3
+    security_review_max_iterations: int = 2
+
+    # Codex review settings
     codex_review_max_iterations: int = 3
     codex_review_model: str = "gpt-5.3-codex"
 

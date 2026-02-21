@@ -1,9 +1,6 @@
 """Implement command - autonomous task implementation."""
 
 import logging
-import shutil
-import subprocess
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -138,21 +135,24 @@ def run_implement(
             )
             session_log.append(f"Completed: {task_ref}")
 
-            # Codex review loop (after main Claude work, resuming same session for fixes)
-            codex_ok = run_codex_review_loop(
+            completed.append(task_num)
+
+            # Review chain (after main Claude session completes)
+            from .review_chain import run_review_chain
+
+            chain_ok = run_review_chain(
                 task_ref=task_ref,
                 working_dir=working_dir,
-                log_dir=settings.log_dir / "reviews",
+                log_dir=settings.log_dir,
                 settings=settings,
                 session_log=session_log,
-                session_id=result.session_id,
+                main_session_id=result.session_id,
+                notifier=notifier,
             )
-            if codex_ok:
-                console.print("[green]✓ Codex Review: LGTM[/green]")
+            if chain_ok:
+                console.print("[green]✓ Review Chain: completed[/green]")
             else:
-                console.print("[yellow]⚠ Codex Review: issues remain after max iterations[/yellow]")
-
-            completed.append(task_num)
+                console.print("[yellow]⚠ Review Chain: finalization failed[/yellow]")
 
             # Get task status for notification
             task_status = get_task_status(project, task_num)
@@ -321,325 +321,6 @@ def execute_task_with_recovery(
 
         # Non-recoverable error
         return result
-
-
-def _build_codex_review_prompt(task_ref: str) -> str:
-    """Build prompt for codex review (first iteration only).
-
-    Subsequent iterations use --uncommitted flag without a prompt
-    (codex CLI doesn't allow both --uncommitted and a prompt).
-    """
-    return (
-        f"Выполни код-ревью для задачи {task_ref}.\n"
-        "\n"
-        "1. Получи детали задачи через MCP md-task-mcp: tasks(project, number)\n"
-        "2. Прочитай CLAUDE.md для URL/credentials тестового сервера\n"
-        "3. Проанализируй последний коммит (git log -1 -p, git diff HEAD~1)\n"
-        "4. Если есть frontend — проверь UI через playwright MCP\n"
-        "5. ДОБАВЬ результаты к Review: update_task(review=existing + new)\n"
-        "\n"
-        "Формат замечаний: CRITICAL / HIGH / MEDIUM / LOW\n"
-        'Если замечаний нет — напиши "LGTM" в конце.\n'
-        "\n"
-        "НЕ ИЗМЕНЯЙ КОД — только анализируй."
-    )
-
-
-def _build_claude_fix_prompt(task_ref: str) -> str:
-    """Build prompt for claude fix session."""
-    return (
-        f"Прочитай review поле задачи {task_ref} через md-task-mcp.\n"
-        "Исправь все CRITICAL и HIGH замечания от последней итерации Codex Review.\n"
-        "\n"
-        "Для каждого замечания:\n"
-        "- ✅ [main-claude] Fixed: <что исправлено> — если исправил\n"
-        "- ❌ [main-claude] Declined: <обоснование> — если некорректно\n"
-        "\n"
-        "Обнови review поле задачи с отметками.\n"
-        "НЕ делай коммит — просто исправь код."
-    )
-
-
-def run_codex_review(
-    task_ref: str,
-    working_dir: Path,
-    log_path: Path,
-    iteration: int,
-    settings: Settings,
-) -> tuple[bool, bool]:
-    """Run codex review as subprocess.
-
-    Returns (success, is_lgtm).
-    """
-    if not shutil.which("codex"):
-        console.print("[red]codex not found in PATH[/red]")
-        return False, False
-
-    model = settings.codex_review_model
-
-    # First iteration reviews committed code with custom prompt,
-    # subsequent ones check uncommitted fixes (--uncommitted is incompatible with prompt)
-    if iteration > 1:
-        cmd = [
-            "codex",
-            "review",
-            "--uncommitted",
-            "-c",
-            f'model="{model}"',
-            "-c",
-            'model_reasoning_effort="high"',
-        ]
-    else:
-        prompt = _build_codex_review_prompt(task_ref)
-        cmd = [
-            "codex",
-            "review",
-            "-c",
-            f'model="{model}"',
-            "-c",
-            'model_reasoning_effort="high"',
-            prompt,
-        ]
-
-    console.print(f"[cyan]Codex review iteration {iteration}...[/cyan]")
-
-    start_time = time.time()
-    try:
-        with open(log_path, "w") as log_file:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=working_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
-            last_status_time = start_time
-            line_count = 0
-            past_prompt = False
-            expect_exec_cmd = False
-            codex_output_lines: list[str] = []
-            for raw_line in proc.stdout:
-                log_file.write(raw_line.decode("utf-8", errors="replace"))
-                line_count += 1
-                text = raw_line.decode("utf-8", errors="replace").strip()
-
-                # Track when we're past the initial prompt echo
-                if not past_prompt and text.startswith("thinking"):
-                    past_prompt = True
-                if past_prompt:
-                    codex_output_lines.append(text)
-
-                # After "exec" line, next line has the command details
-                if expect_exec_cmd:
-                    expect_exec_cmd = False
-                    # Format: '/usr/bin/zsh -lc "cmd..." in /dir succeeded in Xms:'
-                    cmd_display = text
-                    if '"' in text:
-                        # Extract the shell command from between quotes
-                        parts = text.split('"', 2)
-                        if len(parts) >= 2:
-                            cmd_display = parts[1]
-                    elapsed = format_duration(int(time.time() - start_time))
-                    console.print(f"  [dim][{elapsed}] exec: {cmd_display}[/dim]")
-                    last_status_time = time.time()
-                    continue
-
-                # Show key events in console
-                if text.startswith("tool "):
-                    tool_name = text.split("(", 1)[0].replace("tool ", "")
-                    elapsed = format_duration(int(time.time() - start_time))
-                    console.print(f"  [dim][{elapsed}] tool: {tool_name}[/dim]")
-                    last_status_time = time.time()
-                elif text == "exec":
-                    expect_exec_cmd = True
-                elif time.time() - last_status_time >= 60:
-                    elapsed = format_duration(int(time.time() - start_time))
-                    console.print(f"  [dim][{elapsed}] processing... ({line_count} lines)[/dim]")
-                    last_status_time = time.time()
-
-            proc.wait()
-
-        duration = int(time.time() - start_time)
-
-        if proc.returncode != 0:
-            console.print(
-                f"[red]Codex review failed (exit code {proc.returncode}, {format_duration(duration)})[/red]"
-            )
-            return False, False
-
-        # Check LGTM only in codex output (after prompt), not in the full log
-        # which contains our prompt with the word "LGTM" in instructions
-        codex_output = "\n".join(codex_output_lines)
-        is_lgtm = "LGTM" in codex_output
-        console.print(
-            f"[green]Codex review done ({format_duration(duration)})"
-            f"{' — LGTM!' if is_lgtm else ''}[/green]"
-        )
-        return True, is_lgtm
-
-    except Exception as e:
-        console.print(f"[red]Codex review error: {e}[/red]")
-        return False, False
-
-
-def run_claude_fix(
-    task_ref: str,
-    working_dir: Path,
-    log_path: Path,
-    iteration: int,
-    settings: Settings,
-    resume_session: str | None = None,
-) -> bool:
-    """Run claude to fix codex review issues.
-
-    When resume_session is provided, continues the original implementation
-    session so Claude has full context of what was done and why.
-
-    Returns True if fix succeeded.
-    """
-    prompt = _build_claude_fix_prompt(task_ref)
-
-    console.print(
-        f"[cyan]Claude fix iteration {iteration}{' (resuming session)' if resume_session else ''}...[/cyan]"
-    )
-
-    result = run_claude(
-        prompt=prompt,
-        working_dir=working_dir,
-        log_path=log_path,
-        resume_session=resume_session,
-    )
-
-    if result.error_type.is_success:
-        console.print(
-            f"[green]Claude fix done ({format_duration(result.duration_seconds)}, ${result.cost_usd:.2f})[/green]"
-        )
-        return True
-
-    console.print(f"[red]Claude fix failed: {result.error_type.value}[/red]")
-    return False
-
-
-def run_codex_review_loop(
-    task_ref: str,
-    working_dir: Path,
-    log_dir: Path,
-    settings: Settings,
-    session_log: SessionLog,
-    session_id: str | None = None,
-) -> bool:
-    """Run iterative codex review loop.
-
-    1. codex review -> writes review to task, outputs to log
-    2. Check for LGTM in output -> if yes, done
-    3. claude fix (--resume original session) -> fixes issues with full context
-    4. Repeat up to max_iterations
-
-    Args:
-        session_id: Claude session ID from the main implementation run.
-            When provided, fix sessions resume this session so Claude has
-            full context of what was implemented and why.
-
-    Returns True if LGTM achieved, False otherwise.
-    """
-    log_dir.mkdir(parents=True, exist_ok=True)
-    task_safe = task_ref.replace("#", "_")
-    max_iterations = settings.codex_review_max_iterations
-
-    console.rule(f"[cyan]Codex Review Loop: {task_ref}[/cyan]")
-    session_log.append(f"Codex review loop started: {task_ref}")
-
-    for iteration in range(1, max_iterations + 1):
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        # 1. Codex review
-        review_log = log_dir / f"{task_safe}_codex-review_iter{iteration}_{ts}.log"
-        success, is_lgtm = run_codex_review(
-            task_ref=task_ref,
-            working_dir=working_dir,
-            log_path=review_log,
-            iteration=iteration,
-            settings=settings,
-        )
-
-        if not success:
-            session_log.append(f"Codex review failed at iteration {iteration}")
-            return False
-
-        if is_lgtm:
-            # If there were fixes (iteration > 1), create a fixup commit
-            if iteration > 1:
-                _create_fixup_commit(task_ref, working_dir, session_log)
-            session_log.append(f"Codex LGTM after {iteration} iteration(s)")
-            return True
-
-        # 2. Claude fix (not on last iteration)
-        if iteration < max_iterations:
-            fix_log = log_dir / f"{task_safe}_codex-fix_iter{iteration}_{ts}.log"
-            fix_success = run_claude_fix(
-                task_ref=task_ref,
-                working_dir=working_dir,
-                log_path=fix_log,
-                iteration=iteration,
-                settings=settings,
-                resume_session=session_id,
-            )
-            if not fix_success:
-                session_log.append(f"Claude fix failed at iteration {iteration}")
-                return False
-
-    # Max iterations without LGTM — commit fixes if any were made
-    if max_iterations > 1:
-        _create_fixup_commit(task_ref, working_dir, session_log)
-
-    session_log.append(f"Codex review: max iterations ({max_iterations}) reached without LGTM")
-    return False
-
-
-def _create_fixup_commit(
-    task_ref: str,
-    working_dir: Path,
-    session_log: SessionLog,
-) -> None:
-    """Create a fixup commit for codex review fixes if there are changes."""
-    # Check if there are uncommitted changes
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=working_dir,
-        capture_output=True,
-        text=True,
-    )
-    if not status.stdout.strip():
-        return
-
-    # Get the last commit hash for fixup
-    log_result = subprocess.run(
-        ["git", "log", "-1", "--format=%H"],
-        cwd=working_dir,
-        capture_output=True,
-        text=True,
-    )
-    last_hash = log_result.stdout.strip()
-    if not last_hash:
-        return
-
-    # Stage and create fixup commit
-    subprocess.run(["git", "add", "-A"], cwd=working_dir, capture_output=True)
-    subprocess.run(
-        ["git", "commit", f"--fixup={last_hash}"],
-        cwd=working_dir,
-        capture_output=True,
-    )
-
-    # Autosquash
-    subprocess.run(
-        ["git", "rebase", "-i", "--autosquash", f"{last_hash}~1"],
-        cwd=working_dir,
-        capture_output=True,
-        env={**subprocess.os.environ, "GIT_SEQUENCE_EDITOR": "true"},
-    )
-
-    session_log.append("Created fixup commit for codex review fixes")
-    console.print("[dim]Fixup commit created for codex review fixes[/dim]")
 
 
 def run_batch_check(

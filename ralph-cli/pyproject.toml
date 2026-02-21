@@ -24,5 +24,8 @@ ralph = "ralph_cli.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["ralph_cli"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"prompts" = "ralph_cli/_prompts"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
