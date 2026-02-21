@@ -67,6 +67,7 @@ def run_interview(
             "claude",
             "--model",
             "opus",
+            "--dangerously-skip-permissions",
             f"/ralph-interview-task {task_ref}",
         ]
 
