@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added
+- **claude: code-audit skill for automated codebase analysis** (#40)
+  - New skill `claude/skills/code-audit.md` — automated codebase audit with task generation
+  - 5 analysis categories: test coverage (pytest-cov + heuristic), dead code (ruff F4xx), code duplication, missing docstrings, CLAUDE.md pattern violations
+  - Deduplication against existing tasks (done-tasks excluded, intra-run dedup)
+  - Input validation for package, project, focus arguments
+  - Safety section: prompt injection directives, consecutive failure escalation, hidden directory exclusion
+  - Filterable by package (tasks, sandbox, ralph-cli, all) and focus category
 - **ralph-cli: Codex plan review in `ralph plan`** (#25)
   - Automatic plan verification via Codex CLI after user approves plan in `ralph plan`
   - `run_codex_plan_review()` runs Codex as subprocess with stdout streaming and timeout handling
