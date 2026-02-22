@@ -24,7 +24,7 @@ arguments:
 
 ## КРИТИЧНО
 
-**План записывается В ЗАДАЧУ через md-task-mcp в поле `plan`, а НЕ в локальный файл!**
+**План записывается В ЗАДАЧУ через ralph-tasks в поле `plan`, а НЕ в локальный файл!**
 
 ```python
 # ПРАВИЛЬНО — используй поле plan:
@@ -47,7 +47,7 @@ Task reference: `$ARGUMENTS`
 
 ### Phase 0: Get Task
 
-Получи задачу через md-task-mcp:
+Получи задачу через ralph-tasks:
 
 ```
 get_task(project="<project>", number=<N>)

@@ -1,16 +1,16 @@
 ---
 name: create-tasks
-description: Create tasks in md-task-mcp from a list of notes
+description: Create tasks in ralph-tasks from a list of notes
 arguments:
   - name: notes
     description: List of notes/ideas (one per line or comma-separated)
     required: true
   - name: project
-    description: Project name for md-task-mcp (default: myproject)
+    description: Project name for ralph-tasks (default: myproject)
     required: false
 ---
 
-Ты создаёшь задачи в md-task-mcp на основе списка заметок пользователя.
+Ты создаёшь задачи в ralph-tasks на основе списка заметок пользователя.
 
 ## Workflow
 
@@ -82,7 +82,7 @@ arguments:
 
 ## Phase 4: Create Tasks
 
-Для каждой подтверждённой задачи вызови `mcp__md-task-mcp__create_task`:
+Для каждой подтверждённой задачи вызови `mcp__ralph-tasks__create_task`:
 
 ```python
 create_task(

@@ -41,7 +41,7 @@ pytest uses `--import-mode=importlib` to avoid name collisions across packages.
 
 ## MCP Servers
 
-- **md-task-mcp** — task management (projects, tasks, plans, reviews)
+- **ralph-tasks** — task management (projects, tasks, plans, reviews)
 
 ## Review Guidelines
 
@@ -70,7 +70,7 @@ pytest uses `--import-mode=importlib` to avoid name collisions across packages.
 2. **Security** — SQL injection, XSS, CSRF, hardcoded secrets, input validation
 3. **Test coverage** — sufficient assertions, edge cases covered, no skipped tests
 4. **Code quality** — naming, DRY, error handling, consistency with existing patterns
-5. **Task compliance** — changes match the task requirements (get task via md-task-mcp)
+5. **Task compliance** — changes match the task requirements (get task via ralph-tasks)
 
 ### UI Verification (for frontend changes)
 
@@ -83,7 +83,7 @@ When changes touch `templates/`, `static/`, or UI-related code:
 
 ### Review Output
 
-Append results to the task's review field via md-task-mcp `update_task`.
+Append results to the task's review field via ralph-tasks `update_task`.
 Do NOT replace existing review content — always append.
 
 If no issues found, write: `NO ISSUES FOUND`.

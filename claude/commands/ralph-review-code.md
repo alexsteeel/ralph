@@ -13,7 +13,7 @@ Task ref: `$ARGUMENTS`
 
 ## 1. Получи задачу
 
-Используй `mcp__md-task-mcp__tasks(project, number)` чтобы получить task.
+Используй `mcp__ralph-tasks__tasks(project, number)` чтобы получить task.
 
 ## 2. Запусти 5 агентов ПАРАЛЛЕЛЬНО
 

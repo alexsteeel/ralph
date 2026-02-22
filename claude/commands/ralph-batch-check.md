@@ -22,7 +22,7 @@ arguments:
 
 ## Workflow
 
-### 1. Создай задачу проверки в md-task-mcp
+### 1. Создай задачу проверки в ralph-tasks
 
 Описание: "Batch check after tasks: <список номеров>"
 

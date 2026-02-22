@@ -1,11 +1,11 @@
 ---
 name: task-manager
-description: "Manage development tasks via md-task-mcp MCP server. Use when user asks about tasks, projects, or task management."
+description: "Manage development tasks via ralph-tasks MCP server. Use when user asks about tasks, projects, or task management."
 ---
 
 # Task Manager Skill
 
-Use md-task-mcp to manage development tasks.
+Use ralph-tasks to manage development tasks.
 
 ## Task Naming Rule
 
@@ -27,7 +27,7 @@ Use infinitive form (что сделать?) with brief goal:
 
 ## Task File Format
 
-Tasks stored in `~/.md-task-mcp/{project}/tasks/{NNN}-{slug}.md`:
+Tasks stored in `~/.ralph-tasks/{project}/tasks/{NNN}-{slug}.md`:
 
 ```markdown
 # Task 1: Task summary

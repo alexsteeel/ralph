@@ -84,7 +84,7 @@ arguments:
 
 | Инструмент | Фаза | Контекст |
 |------------|------|----------|
-| `md-task-mcp` | 0, 1, 11 | основной |
+| `ralph-tasks` | 0, 1, 11 | основной |
 | `TodoWrite` | 0-11 | основной (отслеживание прогресса) |
 | `Read` | 2 | основной (чтение файлов из Scope) |
 | `context7`, `pyright-lsp`, `playwright` | 3 | основной |
@@ -879,7 +879,7 @@ I confirm that all task phases are fully completed.
 
 | Ситуация | Действие |
 |----------|----------|
-| md-task-mcp недоступен | blocks + hold → ВЫЙТИ |
+| ralph-tasks недоступен | blocks + hold → ВЫЙТИ |
 | Непонятные требования в плане | blocks + hold → ВЫЙТИ |
 | Неразрешимый конфликт с кодом | blocks + hold → ВЫЙТИ |
 

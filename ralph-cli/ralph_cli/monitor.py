@@ -132,8 +132,8 @@ def _format_bash(i: dict) -> str:
 
 def _format_mcp_tool(name: str, input_data: dict) -> str | None:
     """Format MCP tool calls."""
-    if name.startswith("mcp__md-task-mcp__"):
-        action = name.replace("mcp__md-task-mcp__", "")
+    if name.startswith("mcp__ralph-tasks__") or name.startswith("mcp__md-task-mcp__"):
+        action = name.replace("mcp__ralph-tasks__", "").replace("mcp__md-task-mcp__", "")
         project = input_data.get("project", "")
         number = input_data.get("number", "")
         status = input_data.get("status", "")

@@ -24,7 +24,7 @@ which codex || { echo "ERROR: codex not found"; exit 1; }
 
 ## 2. Получи задачу
 
-Используй `mcp__md-task-mcp__tasks(project, number)` чтобы получить task.
+Используй `mcp__ralph-tasks__tasks(project, number)` чтобы получить task.
 Запомни текущие findings через `list_review_findings`.
 
 ## 3. Запусти codex review НАПРЯМУЮ
@@ -44,7 +44,7 @@ codex review \
   "
 Ты выполняешь код-ревью для задачи $ARGUMENTS.
 
-1. Получи детали задачи через MCP md-task-mcp: tasks(project, number)
+1. Получи детали задачи через MCP ralph-tasks: tasks(project, number)
 2. Прочитай CLAUDE.md в директории тестов для получения URL и credentials
 3. Проанализируй незакоммиченные изменения на соответствие ТЗ
 4. Если есть frontend изменения — проверь UI через playwright MCP

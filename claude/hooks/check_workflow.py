@@ -24,7 +24,7 @@ CHECKLIST = """
 ## Checklist for /execute-python-task
 
 ### Planning
-- [ ] Задача получена из md-task-mcp
+- [ ] Задача получена из ralph-tasks
 - [ ] Plan Mode выполнен (EnterPlanMode → анализ → ExitPlanMode)
 - [ ] План одобрен пользователем
 

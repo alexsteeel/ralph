@@ -17,8 +17,8 @@ arguments:
 
 ## Phase 1: Get Task Details
 
-Получи детали задачи через md-task-mcp:
-- Используй `mcp__md-task-mcp__tasks` с project и number из `{{task_ref}}`
+Получи детали задачи через ralph-tasks:
+- Используй `mcp__ralph-tasks__tasks` с project и number из `{{task_ref}}`
 - Запомни содержимое задачи для контекста
 
 ## Phase 2: Run Codex Review
@@ -59,7 +59,7 @@ codex review \
 
 ## Твоя задача
 
-1. Получи детали задачи через MCP md-task-mcp: tasks(project, number)
+1. Получи детали задачи через MCP ralph-tasks: tasks(project, number)
 2. Прочитай CLAUDE.md в директории тестов для получения URL и credentials тестового сервера
 3. Проанализируй незакоммиченные изменения (git diff, git status) на соответствие ТЗ
 4. Если есть frontend изменения — ОБЯЗАТЕЛЬНО проверь UI через playwright MCP
@@ -263,7 +263,7 @@ fi
 
 После выполнения Codex:
 
-1. **Получи обновлённую задачу** через `mcp__md-task-mcp__tasks(project, number)`
+1. **Получи обновлённую задачу** через `mcp__ralph-tasks__tasks(project, number)`
 
 2. **ОБЯЗАТЕЛЬНО проверь наличие findings**:
    - Используй `list_review_findings(project, number, review_type="codex-review")` для проверки
@@ -368,7 +368,7 @@ codex review \
 | `which codex` не находит codex | СТОП → сообщить → ждать решения |
 | codex завершился с ненулевым exit code | СТОП → показать лог → ждать решения |
 | Review секция не появилась в задаче | СТОП → показать лог → ждать решения |
-| md-task-mcp недоступен | СТОП → сообщить → ждать решения |
+| ralph-tasks недоступен | СТОП → сообщить → ждать решения |
 
 ### ⚠️ ЗАПРЕЩЕНО
 
@@ -388,7 +388,7 @@ codex review \
 
 ## Checklist
 
-- [ ] Задача получена через md-task-mcp
+- [ ] Задача получена через ralph-tasks
 - [ ] **Codex доступен** (`which codex` успешно)
 - [ ] Codex review запущен с правильным промптом
 - [ ] **Exit code = 0** (codex завершился успешно)

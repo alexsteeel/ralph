@@ -1,6 +1,6 @@
 ---
 name: execute-python-task
-description: Execute Python task from md-task-mcp
+description: Execute Python task from ralph-tasks
 arguments:
   - name: task_ref
     description: Task reference in format "project#N" (e.g., "myproject#18")
@@ -54,7 +54,7 @@ arguments:
 
 | Инструмент | Фаза | Контекст |
 |------------|------|----------|
-| `md-task-mcp` | 0, 2, 12 | основной |
+| `ralph-tasks` | 0, 2, 12 | основной |
 | `TodoWrite` | 0-12 | основной (отслеживание прогресса) |
 | `EnterPlanMode`, `ExitPlanMode` | 1 | **plan mode** |
 | `context7`, `pyright-lsp`, `playwright` | 3 | основной |
@@ -67,7 +67,7 @@ arguments:
 
 **Task reference:** `$ARGUMENTS`
 
-Задача ДОЛЖНА существовать в md-task-mcp. Формат: `project#N`.
+Задача ДОЛЖНА существовать в ralph-tasks. Формат: `project#N`.
 
 ## Workflow
 
@@ -127,7 +127,7 @@ arguments:
 
 ## Phase 0: Get Task
 
-Получи задачу через md-task-mcp:
+Получи задачу через ralph-tasks:
 
 ```python
 task = get_task(project="<project>", number=<N>)
@@ -246,7 +246,7 @@ tasks(project="<project>")
 
 ## Phase 2: Update Task
 
-После одобрения плана обнови задачу через `mcp__md-task-mcp__update_task`:
+После одобрения плана обнови задачу через `mcp__ralph-tasks__update_task`:
 
 ```python
 # План записывается в поле plan, НЕ в body!
@@ -484,7 +484,7 @@ Security review проверяет:
 
 ### Обработка результатов
 
-1. **Запиши результаты в задачу** через md-task-mcp:
+1. **Запиши результаты в задачу** через ralph-tasks:
    ```markdown
    ## Security Review
    - [Найденные уязвимости]
@@ -821,7 +821,7 @@ Skill(skill="commit")
 ## Checklist
 
 ### Planning (Phase 0-2)
-- [ ] Задача получена из md-task-mcp
+- [ ] Задача получена из ralph-tasks
 - [ ] **Зависимости проанализированы** (явные depends_on + неявные по семантике)
 - [ ] Plan Mode выполнен (EnterPlanMode → анализ → ExitPlanMode)
 - [ ] **План НЕ содержит номеров строк** (используются устойчивые маркеры)
@@ -875,7 +875,7 @@ Skill(skill="commit")
 | Codex недоступен | СТОП → сообщить → ждать решения |
 | Code review не выполнен | СТОП → сообщить → ждать решения |
 | Тесты падают после 3 попыток | СТОП → сообщить → ждать решения |
-| md-task-mcp недоступен | СТОП → сообщить → ждать решения |
+| ralph-tasks недоступен | СТОП → сообщить → ждать решения |
 
 **ЗАПРЕЩЕНО:**
 - Заменять недоступный инструмент собственным анализом

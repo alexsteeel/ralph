@@ -5,7 +5,7 @@ arguments:
   - name: task_ref
     description: Task reference in format "project#N" (e.g., "myproject#18")
     required: true
-allowed-tools: AskUserQuestion, Read, Glob, Grep, mcp__md-task-mcp__get_task, mcp__md-task-mcp__update_task, mcp__md-task-mcp__tasks
+allowed-tools: AskUserQuestion, Read, Glob, Grep, mcp__ralph-tasks__get_task, mcp__ralph-tasks__update_task, mcp__ralph-tasks__tasks
 ---
 
 Ты проводишь ДЕТАЛЬНОЕ ИНТЕРВЬЮ для создания спецификации задачи.
@@ -29,7 +29,7 @@ Task reference: `$ARGUMENTS`
 
 ### Phase 0: Get Task
 
-Получи задачу через md-task-mcp.
+Получи задачу через ralph-tasks.
 
 ### Phase 1: Context Gathering
 

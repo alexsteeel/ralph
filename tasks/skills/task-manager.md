@@ -30,8 +30,8 @@ Use infinitive form (что сделать?) with brief goal:
 
 ## Task File Format
 
-Tasks stored in `~/.md-task-mcp/{project}/tasks/{NNN}-{slug}.md`.
-Attachments stored in `~/.md-task-mcp/{project}/tasks/{NNN}-{slug}/` folder:
+Tasks stored in Neo4j graph database (project → task nodes).
+Attachments stored in MinIO object storage (`{project}/{NNN}/{filename}`):
 
 ```markdown
 # Task 1: Task summary
