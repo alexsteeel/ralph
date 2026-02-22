@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+- **ralph-cli: externalize hardcoded Codex plan prompt to `prompts/`** (#64)
+  - Extracted `_build_codex_plan_prompt()` f-string to `prompts/codex-plan-reviewer.md` template
+  - Inlined `load_prompt()` call in `run_codex_plan_review()`, removed wrapper function
+  - Renamed template placeholder `{task_number}` → `{number}` for project convention consistency
+  - Added graceful error handling for missing/broken prompt template (`FileNotFoundError`, `KeyError`)
+  - Fixed pre-existing lint issues: unused `as e` binding, extraneous f-string prefix
+  - New test: `test_missing_prompt_file_graceful_skip`, `test_no_unreplaced_placeholders`
+
 ### Added
 - **ralph-cli, ralph-tasks: `--version` flag for CLI diagnostics** (#52)
   - `ralph --version` → `ralph-cli {version}` (typer callback with `is_eager=True`)

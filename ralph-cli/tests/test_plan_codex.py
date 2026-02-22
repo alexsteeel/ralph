@@ -5,11 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from ralph_cli.commands.plan import (
-    _build_codex_plan_prompt,
     _check_plan_lgtm,
     run_codex_plan_review,
 )
 from ralph_cli.config import Settings
+from ralph_cli.prompts import load_prompt
 
 
 @pytest.fixture
@@ -29,15 +29,20 @@ def session_log():
 
 
 # ---------------------------------------------------------------------------
-# _build_codex_plan_prompt
+# codex-plan-reviewer prompt template
 # ---------------------------------------------------------------------------
 
 
-class TestBuildCodexPlanPrompt:
+class TestCodexPlanReviewerPrompt:
     def test_contains_project_and_task(self):
-        prompt = _build_codex_plan_prompt("myproj", 42)
+        prompt = load_prompt("codex-plan-reviewer", project="myproj", number="42")
         assert "myproj" in prompt
         assert "42" in prompt
+
+    def test_no_unreplaced_placeholders(self):
+        prompt = load_prompt("codex-plan-reviewer", project="myproj", number="42")
+        assert "{project}" not in prompt
+        assert "{number}" not in prompt
 
     @pytest.mark.parametrize(
         "expected",
@@ -50,7 +55,7 @@ class TestBuildCodexPlanPrompt:
         ],
     )
     def test_prompt_contains(self, expected):
-        prompt = _build_codex_plan_prompt("proj", 1)
+        prompt = load_prompt("codex-plan-reviewer", project="proj", number="1")
         assert expected in prompt
 
 
@@ -126,6 +131,26 @@ class TestRunCodexPlanReview:
 
     @patch("ralph_cli.commands.plan.shutil.which", return_value=None)
     def test_codex_not_found_graceful_skip(self, mock_which, temp_dir, settings, session_log):
+        kwargs = self._make_kwargs(settings, session_log, temp_dir)
+        success, is_lgtm = run_codex_plan_review(**kwargs)
+        assert success is True
+        assert is_lgtm is True
+
+    @patch("ralph_cli.commands.plan.load_prompt", side_effect=FileNotFoundError("not found"))
+    @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
+    def test_missing_prompt_file_graceful_skip(
+        self, mock_which, mock_load, temp_dir, settings, session_log
+    ):
+        kwargs = self._make_kwargs(settings, session_log, temp_dir)
+        success, is_lgtm = run_codex_plan_review(**kwargs)
+        assert success is True
+        assert is_lgtm is True
+
+    @patch("ralph_cli.commands.plan.load_prompt", side_effect=KeyError("number"))
+    @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
+    def test_key_error_in_prompt_graceful_skip(
+        self, mock_which, mock_load, temp_dir, settings, session_log
+    ):
         kwargs = self._make_kwargs(settings, session_log, temp_dir)
         success, is_lgtm = run_codex_plan_review(**kwargs)
         assert success is True
