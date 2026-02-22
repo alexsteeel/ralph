@@ -108,14 +108,6 @@ class TestRunCodexPlanReview:
             "session_log": session_log,
         }
 
-    @staticmethod
-    def _make_mock_proc(stdout_lines, returncode=0):
-        proc = MagicMock()
-        proc.stdout = iter(stdout_lines)
-        proc.returncode = returncode
-        proc.wait.return_value = returncode
-        return proc
-
     def test_disabled_returns_true_true(self, temp_dir, session_log):
         settings = Settings(_env_file=None, codex_plan_review_enabled=False)
         kwargs = self._make_kwargs(settings, session_log, temp_dir)
@@ -132,120 +124,57 @@ class TestRunCodexPlanReview:
         assert is_lgtm is True
 
     @patch("ralph_cli.commands.plan._check_plan_lgtm", return_value=(True, 0))
-    @patch("ralph_cli.commands.plan.subprocess.Popen")
+    @patch("ralph_cli.commands.plan.subprocess.run", return_value=MagicMock(returncode=0))
     @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
-    def test_success_lgtm(self, mock_which, mock_popen, mock_lgtm, temp_dir, settings, session_log):
-        mock_popen.return_value = self._make_mock_proc([b"thinking\n", b"No issues found\n"])
-
+    def test_success_lgtm(self, mock_which, mock_run, mock_lgtm, temp_dir, settings, session_log):
         kwargs = self._make_kwargs(settings, session_log, temp_dir)
         success, is_lgtm = run_codex_plan_review(**kwargs)
         assert success is True
         assert is_lgtm is True
 
     @patch("ralph_cli.commands.plan._check_plan_lgtm", return_value=(False, 3))
-    @patch("ralph_cli.commands.plan.subprocess.Popen")
+    @patch("ralph_cli.commands.plan.subprocess.run", return_value=MagicMock(returncode=0))
     @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
     def test_success_with_issues(
-        self, mock_which, mock_popen, mock_lgtm, temp_dir, settings, session_log
+        self, mock_which, mock_run, mock_lgtm, temp_dir, settings, session_log
     ):
-        mock_popen.return_value = self._make_mock_proc([b"thinking\n", b"Found 3 issues\n"])
-
         kwargs = self._make_kwargs(settings, session_log, temp_dir)
         success, is_lgtm = run_codex_plan_review(**kwargs)
         assert success is True
         assert is_lgtm is False
 
-    @patch("ralph_cli.commands.plan.subprocess.Popen")
+    @patch("ralph_cli.commands.plan.subprocess.run", return_value=MagicMock(returncode=1))
     @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
-    def test_codex_failure_exit_code(self, mock_which, mock_popen, temp_dir, settings, session_log):
-        mock_popen.return_value = self._make_mock_proc([b"error\n"], returncode=1)
-
+    def test_codex_failure_exit_code(self, mock_which, mock_run, temp_dir, settings, session_log):
         kwargs = self._make_kwargs(settings, session_log, temp_dir)
         success, is_lgtm = run_codex_plan_review(**kwargs)
         assert success is False
         assert is_lgtm is False
 
-    @patch("ralph_cli.commands.plan.subprocess.Popen", side_effect=OSError("spawn failed"))
+    @patch("ralph_cli.commands.plan.subprocess.run", side_effect=OSError("spawn failed"))
     @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
-    def test_exception_returns_false(self, mock_which, mock_popen, temp_dir, settings, session_log):
+    def test_exception_returns_false(self, mock_which, mock_run, temp_dir, settings, session_log):
         kwargs = self._make_kwargs(settings, session_log, temp_dir)
         success, is_lgtm = run_codex_plan_review(**kwargs)
         assert success is False
         assert is_lgtm is False
-
-    @patch("ralph_cli.commands.plan.subprocess.Popen")
-    @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
-    def test_timeout_kills_process(self, mock_which, mock_popen, temp_dir, settings, session_log):
-        proc = self._make_mock_proc([b"slow\n"])
-        # First call (with timeout) raises; second call (after kill) succeeds
-        proc.wait.side_effect = [
-            subprocess.TimeoutExpired(cmd="codex", timeout=1800),
-            None,
-        ]
-        proc.kill.return_value = None
-        mock_popen.return_value = proc
-
-        kwargs = self._make_kwargs(settings, session_log, temp_dir)
-        success, is_lgtm = run_codex_plan_review(**kwargs)
-        assert success is False
-        assert is_lgtm is False
-        proc.kill.assert_called_once()
 
     @patch("ralph_cli.commands.plan._check_plan_lgtm", return_value=(True, 0))
-    @patch("ralph_cli.commands.plan.subprocess.Popen")
+    @patch("ralph_cli.commands.plan.subprocess.run", return_value=MagicMock(returncode=0))
     @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
-    def test_uses_codex_review_model(
-        self, mock_which, mock_popen, mock_lgtm, temp_dir, session_log
+    def test_launches_interactive_codex(
+        self, mock_which, mock_run, mock_lgtm, temp_dir, settings, session_log
     ):
-        settings = Settings(
-            _env_file=None,
-            codex_plan_review_enabled=True,
-            codex_review_model="gpt-4o",
-        )
-        mock_popen.return_value = self._make_mock_proc([b"ok\n"])
-
         kwargs = self._make_kwargs(settings, session_log, temp_dir)
         run_codex_plan_review(**kwargs)
 
-        cmd = mock_popen.call_args[0][0]
+        cmd = mock_run.call_args[0][0]
         assert cmd[0] == "codex"
-        assert cmd[1] == "exec"
-        assert "--full-auto" in cmd
-        assert any("gpt-4o" in arg for arg in cmd)
-
-    @patch("ralph_cli.commands.plan._check_plan_lgtm", return_value=(True, 0))
-    @patch("ralph_cli.commands.plan.subprocess.Popen")
-    @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
-    def test_creates_log_file(
-        self, mock_which, mock_popen, mock_lgtm, temp_dir, settings, session_log
-    ):
-        mock_popen.return_value = self._make_mock_proc([b"output line\n"])
-
-        kwargs = self._make_kwargs(settings, session_log, temp_dir)
-        run_codex_plan_review(**kwargs)
-
-        log_files = list(kwargs["log_dir"].glob("*plan_review*"))
-        assert len(log_files) == 1
-
-    @patch("ralph_cli.commands.plan._check_plan_lgtm", return_value=(True, 0))
-    @patch("ralph_cli.commands.plan.subprocess.Popen")
-    @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
-    def test_streams_tool_events(
-        self, mock_which, mock_popen, mock_lgtm, temp_dir, settings, session_log
-    ):
-        mock_popen.return_value = self._make_mock_proc(
-            [
-                b"some output\n",
-                b"tool call: add_review_finding\n",
-                b"normal line\n",
-            ]
-        )
-
-        kwargs = self._make_kwargs(settings, session_log, temp_dir)
-        success, is_lgtm = run_codex_plan_review(**kwargs)
-        assert success is True
-        assert is_lgtm is True
-        assert session_log.append.call_count >= 2
+        # Interactive mode: no "exec", no "--full-auto"
+        assert "exec" not in cmd
+        assert "--full-auto" not in cmd
+        # Prompt is the last argument
+        assert "proj" in cmd[-1]
 
 
 # ---------------------------------------------------------------------------

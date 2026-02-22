@@ -16,8 +16,6 @@ from ..logging import SessionLog, format_duration
 
 console = Console()
 
-_STREAM_KEYWORDS = ("tool", "exec", "finding", "add_review")
-
 
 def _build_codex_plan_prompt(project: str, task_number: int) -> str:
     """Build prompt for Codex plan review.
@@ -72,12 +70,15 @@ def run_codex_plan_review(
     settings: Settings,
     session_log: SessionLog,
 ) -> tuple[bool, bool]:
-    """Run Codex plan review as subprocess.
+    """Run interactive Codex plan review.
+
+    Launches Codex TUI with a pre-built prompt. User interacts directly.
+    No pipes — Codex writes to terminal like Claude does.
 
     Returns (success, is_lgtm):
-        - (True, True) if review passed, disabled, or codex not available (graceful skip)
-        - (True, False) if review found issues or could not verify findings
-        - (False, False) if codex process failed or timed out
+        - (True, True) if review passed, disabled, or codex not available
+        - (True, False) if review found issues
+        - (False, False) if codex process failed
     """
     if not settings.codex_plan_review_enabled:
         session_log.append("Codex plan review: disabled")
@@ -90,82 +91,33 @@ def run_codex_plan_review(
 
     prompt = _build_codex_plan_prompt(project, task_number)
 
-    cmd = [
-        "codex",
-        "exec",
-        "--full-auto",
-        "-c",
-        f'model="{settings.codex_review_model}"',
-        "-c",
-        'model_reasoning_effort="high"',
-        prompt,
-    ]
+    cmd = ["codex", prompt]
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = log_dir / f"{project}_{task_number}_plan_review_{ts}.log"
-
-    console.print(f"[cyan]Running Codex plan review for {task_ref}...[/cyan]")
     session_log.append(f"Codex plan review started: {task_ref}")
     start_time = time.time()
 
     try:
-        with open(log_path, "w") as log_file:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=working_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
-            for raw_line in proc.stdout:
-                line = raw_line.decode("utf-8", errors="replace")
-                log_file.write(line)
-                text = line.strip()
-                if any(kw in text for kw in _STREAM_KEYWORDS):
-                    console.print(f"[dim]  {text}[/dim]")
-            proc.wait(timeout=settings.review_timeout)
+        result = subprocess.run(cmd, cwd=working_dir)
 
         duration = int(time.time() - start_time)
-        formatted_duration = format_duration(duration)
+        formatted = format_duration(duration)
 
-        if proc.returncode != 0:
-            console.print(
-                f"[red]✗ Codex plan review failed "
-                f"(exit {proc.returncode}, {formatted_duration})[/red]"
-            )
-            session_log.append(
-                f"Codex plan review failed: exit code {proc.returncode} ({formatted_duration})"
-            )
+        if result.returncode != 0:
+            console.print(f"[red]✗ Codex plan review failed (exit {result.returncode}, {formatted})[/red]")
+            session_log.append(f"Codex plan review failed: exit {result.returncode} ({formatted})")
             return False, False
 
-        # Check whether the review left any open findings
         is_lgtm, open_count = _check_plan_lgtm(project, task_number)
 
         if is_lgtm:
-            console.print(f"[green]Plan review: LGTM ({formatted_duration})[/green]")
-            session_log.append(f"Codex plan review: LGTM ({formatted_duration})")
-        elif open_count is None:
-            console.print(
-                f"[yellow]Plan review: could not verify findings ({formatted_duration})[/yellow]"
-            )
-            session_log.append(
-                f"Codex plan review: could not verify findings ({formatted_duration})"
-            )
+            console.print(f"[green]Plan review: LGTM ({formatted})[/green]")
+            session_log.append(f"Codex plan review: LGTM ({formatted})")
         else:
-            console.print(
-                f"[yellow]Plan review: {open_count} issue(s) found ({formatted_duration})[/yellow]"
-            )
-            session_log.append(
-                f"Codex plan review: {open_count} issue(s) found ({formatted_duration})"
-            )
+            console.print(f"[yellow]Plan review: {open_count} issue(s) found ({formatted})[/yellow]")
+            session_log.append(f"Codex plan review: {open_count} issue(s) ({formatted})")
 
         return True, is_lgtm
 
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
-        console.print(f"[red]Codex plan review timed out after {settings.review_timeout}s[/red]")
-        session_log.append(f"Codex plan review timed out after {settings.review_timeout}s")
-        return False, False
     except Exception as e:
         console.print(f"[red]Codex plan review error: {e}[/red]")
         session_log.append(f"Codex plan review error: {e}")
