@@ -35,6 +35,13 @@ from ralph_sandbox.utils import (
 )
 
 
+def get_compose_base_path() -> Path:
+    """Return path to docker-compose.base.yaml from installed package."""
+    import ralph_sandbox
+
+    return Path(ralph_sandbox.__file__).parent / "docker-compose.base.yaml"
+
+
 # New clear command structure
 @click.command()
 @click.option("--wizard", is_flag=True, help="Run interactive setup wizard")
@@ -287,9 +294,7 @@ def init_global(
 
     package_dir = Path(ralph_sandbox.__file__).parent
     source_proxy_dir = package_dir / "resources" / "docker-proxy"
-    target_proxy_dir = Path.home() / ".ai-sbx" / "share" / "docker-proxy"
-    source_compose_base = package_dir / "docker-compose.base.yaml"
-    target_compose_base = Path.home() / ".ai-sbx" / "share" / "docker-compose.base.yaml"
+    target_proxy_dir = Path.home() / ".ai-sbx" / "docker-proxy"
 
     try:
         # Create target directory
@@ -308,16 +313,6 @@ def init_global(
             system_changes[
                 "files_created" if not target_compose.exists() else "files_modified"
             ].append(str(target_compose))
-
-        # Copy docker-compose.base.yaml
-        if source_compose_base.exists() and (not target_compose_base.exists() or force):
-            import shutil
-
-            shutil.copy2(str(source_compose_base), str(target_compose_base))
-            console.print("[green]✓ Base compose file installed[/green]")
-            system_changes[
-                "files_created" if not target_compose_base.exists() else "files_modified"
-            ].append(str(target_compose_base))
 
     except Exception as e:
         console.print(f"[yellow]⚠ Could not install docker-proxy resources: {e}[/yellow]")
@@ -399,7 +394,7 @@ def init_global(
             )
             try:
                 # Ensure docker-proxy directory exists
-                proxy_dir = Path.home() / ".ai-sbx" / "share" / "docker-proxy"
+                proxy_dir = Path.home() / ".ai-sbx" / "docker-proxy"
                 if not proxy_dir.exists():
                     proxy_dir.mkdir(parents=True, exist_ok=True)
                     system_changes["directories_created"].append(str(proxy_dir))
@@ -454,7 +449,7 @@ def init_global(
         if "ai-sbx-docker-proxy" not in result.stdout:
             # Use system location for docker-proxy
             proxy_compose = (
-                Path.home() / ".ai-sbx" / "share" / "docker-proxy" / "docker-compose.yaml"
+                Path.home() / ".ai-sbx" / "docker-proxy" / "docker-compose.yaml"
             )
 
             if proxy_compose.exists():
@@ -1142,29 +1137,21 @@ def init_project(
         else:
             progress.update(task, description="[yellow]⚠[/yellow] Some files already exist")
 
-        # Copy docker-compose.base.yaml from global share
+        # Copy docker-compose.base.yaml from installed package
         task = progress.add_task("Copying docker-compose.base.yaml...", total=None)
         compose_base = devcontainer_dir / "docker-compose.base.yaml"
-        base_source = Path.home() / ".ai-sbx" / "share" / "docker-compose.base.yaml"
+        base_source = get_compose_base_path()
 
-        if base_source.exists():
-            if not compose_base.exists() or force:
-                import shutil
+        if not compose_base.exists() or force:
+            import shutil
 
-                shutil.copy2(base_source, compose_base)
-                progress.update(
-                    task, description="[green]✓[/green] Copied docker-compose.base.yaml"
-                )
-            else:
-                progress.update(
-                    task, description="[yellow]⚠[/yellow] docker-compose.base.yaml already exists"
-                )
+            shutil.copy2(base_source, compose_base)
+            progress.update(
+                task, description="[green]✓[/green] Copied docker-compose.base.yaml"
+            )
         else:
             progress.update(
-                task, description="[red]✗[/red] docker-compose.base.yaml not found in global share"
-            )
-            console.print(
-                "[yellow]Run 'ai-sbx init global' first to set up global resources[/yellow]"
+                task, description="[yellow]⚠[/yellow] docker-compose.base.yaml already exists"
             )
 
         # Save project config
@@ -1444,12 +1431,12 @@ IMAGE_TAG={DEFAULT_IMAGE_TAG}
     else:
         console.print("[dim].env file already exists[/dim]")
 
-    # Copy docker-compose.base.yaml to project
+    # Copy docker-compose.base.yaml from installed package
     devcontainer_dir = path / ".devcontainer"
     compose_base = devcontainer_dir / "docker-compose.base.yaml"
-    base_source = Path.home() / ".ai-sbx" / "share" / "docker-compose.base.yaml"
+    base_source = get_compose_base_path()
 
-    if not compose_base.exists() and base_source.exists():
+    if not compose_base.exists():
         import shutil
 
         shutil.copy2(base_source, compose_base)

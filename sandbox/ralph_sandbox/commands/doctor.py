@@ -126,8 +126,7 @@ def analyze_system_state(console: Console, system_state: dict[str, Any], verbose
         "Global Config": get_global_config_path().parent,
         "Notifications": home / ".ai-sbx" / "notifications",
         "Projects": home / ".ai-sbx" / "projects",
-        "System Resources": home / ".ai-sbx" / "share",
-        "Docker Proxy": home / ".ai-sbx" / "share" / "docker-proxy",
+        "Docker Proxy": home / ".ai-sbx" / "docker-proxy",
     }
 
     for name, path in system_dirs.items():
@@ -156,11 +155,13 @@ def analyze_system_state(console: Console, system_state: dict[str, Any], verbose
             system_state["directories"][str(path)] = {"name": name, "exists": False}
 
     # Check important files
+    from ralph_sandbox.commands.init import get_compose_base_path
+
     system_files = {
         "Global Config": get_global_config_path(),
-        "Docker Proxy Compose": home / ".ai-sbx" / "share" / "docker-proxy" / "docker-compose.yaml",
-        "Docker Proxy Env": home / ".ai-sbx" / "share" / "docker-proxy" / ".env",
-        "Base Compose": home / ".ai-sbx" / "share" / "docker-compose.base.yaml",
+        "Docker Proxy Compose": home / ".ai-sbx" / "docker-proxy" / "docker-compose.yaml",
+        "Docker Proxy Env": home / ".ai-sbx" / "docker-proxy" / ".env",
+        "Base Compose (package)": get_compose_base_path(),
     }
 
     for name, path in system_files.items():
