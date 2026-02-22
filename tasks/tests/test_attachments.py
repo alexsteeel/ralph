@@ -160,12 +160,72 @@ class TestAttachmentsCRUD:
         result = core.save_attachment(project, number, "../../../etc/passwd", b"hack")
         assert result["name"] == "passwd"
 
+    def test_save_sanitizes_leading_dot(self, project_with_task):
+        from ralph_tasks import core
+
+        project, number = project_with_task
+        result = core.save_attachment(project, number, ".hidden", b"secret")
+        assert result["name"] == "hidden"
+
+    def test_save_then_list_names_match(self, project_with_task):
+        """Save a file with leading dot, then list — names must be consistent."""
+        from ralph_tasks import core
+
+        project, number = project_with_task
+        save_result = core.save_attachment(project, number, ".env", b"SECRET=1")
+
+        attachments = core.list_attachments(project, number)
+        assert len(attachments) == 1
+        assert attachments[0]["name"] == save_result["name"]
+
     def test_save_invalid_filename(self, project_with_task):
         from ralph_tasks import core
 
         project, number = project_with_task
         with pytest.raises(ValueError, match="Invalid filename"):
             core.save_attachment(project, number, "", b"no name")
+
+    def test_copy_sanitizes_leading_dot(self, project_with_task):
+        from ralph_tasks import core
+
+        project, number = project_with_task
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as f:
+            f.write(b"data")
+            temp_path = f.name
+
+        try:
+            result = core.copy_attachment(project, number, temp_path, filename=".hidden")
+            assert result["name"] == "hidden"
+        finally:
+            os.unlink(temp_path)
+
+    def test_copy_sanitizes_traversal(self, project_with_task):
+        from ralph_tasks import core
+
+        project, number = project_with_task
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as f:
+            f.write(b"data")
+            temp_path = f.name
+
+        try:
+            result = core.copy_attachment(project, number, temp_path, filename="../../etc/passwd")
+            assert result["name"] == "passwd"
+        finally:
+            os.unlink(temp_path)
+
+    def test_get_attachment_bytes_invalid_filename(self, project_with_task):
+        from ralph_tasks import core
+
+        project, number = project_with_task
+        with pytest.raises(ValueError, match="Invalid filename"):
+            core.get_attachment_bytes(project, number, "...")
+
+    def test_delete_attachment_invalid_filename(self, project_with_task):
+        from ralph_tasks import core
+
+        project, number = project_with_task
+        with pytest.raises(ValueError, match="Invalid filename"):
+            core.delete_attachment(project, number, "...")
 
     def test_list_empty(self, project_with_task):
         from ralph_tasks import core

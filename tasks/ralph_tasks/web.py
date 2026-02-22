@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from . import __version__
+from . import __version__, storage
 from .core import (
     Task,
     delete_attachment,
@@ -452,11 +452,14 @@ async def upload_attachment_endpoint(
 @app.get("/api/task/{project}/{number}/attachments/{filename:path}")
 async def download_attachment_endpoint(project: str, number: int, filename: str):
     """Download an attachment from MinIO as a streaming response."""
-    content = get_attachment_bytes(project, number, filename)
+    try:
+        content = get_attachment_bytes(project, number, filename)
+    except ValueError:
+        content = None
     if content is None:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    safe_name = Path(filename).name
+    safe_name = storage.sanitize_filename(filename)
     # ASCII-safe fallback + RFC 5987 encoding for non-ASCII filenames
     ascii_name = safe_name.encode("ascii", "replace").decode("ascii").replace('"', '\\"')
     disposition = f'attachment; filename="{ascii_name}"'
@@ -476,9 +479,13 @@ async def download_attachment_endpoint(project: str, number: int, filename: str)
 @app.delete("/api/task/{project}/{number}/attachments/{filename:path}")
 async def delete_attachment_endpoint(project: str, number: int, filename: str):
     """Delete an attachment."""
-    if delete_attachment(project, number, filename):
-        return {"ok": True}
-    raise HTTPException(status_code=404, detail="Attachment not found")
+    try:
+        found = delete_attachment(project, number, filename)
+    except ValueError:
+        found = False
+    if not found:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    return {"ok": True}
 
 
 def main():

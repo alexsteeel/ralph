@@ -86,10 +86,26 @@ def _ready() -> tuple[Minio, str]:
     return _get_client(), _get_bucket()
 
 
+def sanitize_filename(name: str) -> str:
+    """Sanitize a user-provided filename for safe storage.
+
+    Strips directory components, path separators, null bytes, and leading dots.
+    Raises ValueError if the result is empty.
+    """
+    # Strip null bytes before Path() — CPython raises ValueError for embedded nulls
+    safe_input = (name or "").replace("\0", "")
+    base = Path(safe_input).name
+    clean = _sanitize_key_component(base)
+    if not clean:
+        raise ValueError(f"Invalid filename: {name!r}")
+    return clean
+
+
 def _sanitize_key_component(value: str) -> str:
     """Sanitize a component for use in S3 object keys.
 
-    Strips path separators and traversal sequences to prevent key injection.
+    Strips path separators, null bytes, and leading dots to prevent
+    key injection and hidden file creation.
     """
     # Remove path separators and null bytes
     clean = value.replace("/", "").replace("\\", "").replace("\0", "")
@@ -126,7 +142,7 @@ def put_bytes(project: str, task_number: int, filename: str, content: bytes) -> 
     """Upload content to MinIO.
 
     Returns:
-        {"name": filename, "size": int, "etag": str}
+        {"name": sanitized_filename, "size": int, "etag": str}
     """
     client, bucket = _ready()
     key = _object_key(project, task_number, filename)
@@ -138,7 +154,8 @@ def put_bytes(project: str, task_number: int, filename: str, content: bytes) -> 
         length=len(content),
     )
     logger.info(f"Uploaded: {key} ({len(content)} bytes)")
-    return {"name": filename, "size": len(content), "etag": result.etag}
+    safe_filename = _sanitize_key_component(filename)
+    return {"name": safe_filename, "size": len(content), "etag": result.etag}
 
 
 def get_object(project: str, task_number: int, filename: str) -> bytes | None:

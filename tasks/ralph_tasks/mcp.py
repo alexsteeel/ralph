@@ -16,7 +16,7 @@ from pathlib import Path
 from fastmcp import FastMCP
 from starlette.applications import Starlette
 
-from . import __version__
+from . import __version__, storage
 from .core import add_review_finding as _add_review_finding
 from .core import (
     copy_attachment,
@@ -389,7 +389,7 @@ def read_attachment(project: str, number: int, filename: str) -> dict:
 
     # Write to temp location (use normalized name for consistent cache paths)
     safe_project = "".join(c for c in normalize_project_name(project) if c.isalnum() or c in "-_")
-    safe_name = Path(filename).name
+    safe_name = storage.sanitize_filename(filename)
     cache_dir = _ATTACHMENT_CACHE_DIR / safe_project / f"{number:03d}"
     cache_dir.mkdir(parents=True, exist_ok=True)
     local_path = cache_dir / safe_name
@@ -397,7 +397,7 @@ def read_attachment(project: str, number: int, filename: str) -> dict:
 
     return {
         "ok": True,
-        "name": filename,
+        "name": safe_name,
         "path": str(local_path),
         "size": len(content),
     }
