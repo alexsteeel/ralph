@@ -116,7 +116,7 @@ class TestImageCommand:
         assert result.exit_code in [0, 1]
 
     @patch("ralph_sandbox.commands.image._image_exists")
-    @patch("ralph_sandbox.utils.is_docker_running")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
     def test_image_list(self, mock_docker_running, mock_image_exists):
         """Test image list command."""
         mock_docker_running.return_value = True
@@ -129,7 +129,7 @@ class TestImageCommand:
         assert "Image" in result.output or "devcontainer" in result.output
 
     @patch("ralph_sandbox.commands.image._image_exists")
-    @patch("ralph_sandbox.utils.is_docker_running")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
     def test_image_verify(self, mock_docker_running, mock_image_exists):
         """Test image verify command."""
         mock_docker_running.return_value = True

@@ -1,6 +1,7 @@
 """Stream monitor for Claude JSON output."""
 
 import json
+import re
 import sys
 from dataclasses import dataclass
 from typing import TextIO
@@ -194,8 +195,6 @@ class StreamMonitor:
 
         if self.log_file:
             # Strip ANSI for log file
-            import re
-
             clean = re.sub(r"\033\[[0-9;]*m", "", text)
             self.log_file.write(f"[{timestamp_short()}] {clean}\n")
             self.log_file.flush()

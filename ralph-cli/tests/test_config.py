@@ -16,7 +16,7 @@ class TestSettings:
         assert settings.telegram_bot_token is None
         assert settings.telegram_chat_id is None
         assert settings.recovery_enabled is True
-        assert settings.recovery_delays == [600, 1200, 1800]
+        assert settings.recovery_delays == [3600, 7200, 10800]
         assert settings.context_overflow_max_retries == 2
 
     def test_telegram_configured_false(self):

@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # Recovery settings
     recovery_enabled: bool = True
-    recovery_delays: list[int] = Field(default=[600, 1200, 1800])
+    recovery_delays: list[int] = Field(default=[3600, 7200, 10800])  # 1h, 2h, 3h
     context_overflow_max_retries: int = 2
 
     # Timeouts (in seconds)

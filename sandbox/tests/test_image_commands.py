@@ -187,10 +187,12 @@ class TestImageHelpers:
 
         assert exists is False
 
-    def test_verify_images_all_present(self):
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_verify_images_all_present(self, mock_docker, mock_exists):
         """Test verifying images when all are present."""
-        # Since we can't mock internal methods easily and images actually exist,
-        # just test that the command runs
+        mock_docker.return_value = True
+        mock_exists.return_value = True
         runner = CliRunner()
         result = runner.invoke(cli, ["image", "verify"])
 
@@ -199,8 +201,10 @@ class TestImageHelpers:
         assert "image" in result.output.lower() or "verified" in result.output.lower()
 
     @patch("ralph_sandbox.commands.image._image_exists")
-    def test_verify_images_some_missing(self, mock_exists):
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_verify_images_some_missing(self, mock_docker, mock_exists):
         """Test verifying images when some are missing."""
+        mock_docker.return_value = True
         # Return False for tinyproxy to simulate it's missing
         mock_exists.side_effect = [
             True,  # devcontainer exists
@@ -268,7 +272,7 @@ class TestImageListCommand:
         self.runner = CliRunner()
 
     @patch("ralph_sandbox.commands.image._image_exists")
-    @patch("ralph_sandbox.utils.is_docker_running")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
     def test_list_images(self, mock_docker_running, mock_image_exists):
         """Test listing images."""
         mock_docker_running.return_value = True
@@ -338,8 +342,10 @@ class TestImageVerifyCommand:
         self.runner = CliRunner()
 
     @patch("ralph_sandbox.commands.image._image_exists")
-    def test_verify_all_present(self, mock_exists):
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_verify_all_present(self, mock_docker, mock_exists):
         """Test verify when all images are present."""
+        mock_docker.return_value = True
         mock_exists.return_value = True
 
         result = self.runner.invoke(cli, ["image", "verify"])
@@ -348,8 +354,10 @@ class TestImageVerifyCommand:
         assert "verified" in result.output.lower() or "all" in result.output.lower()
 
     @patch("ralph_sandbox.commands.image._image_exists")
-    def test_verify_some_missing(self, mock_exists):
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_verify_some_missing(self, mock_docker, mock_exists):
         """Test verify when some images are missing."""
+        mock_docker.return_value = True
         mock_exists.side_effect = [True, False, True]  # tinyproxy missing
 
         result = self.runner.invoke(cli, ["image", "verify"])
