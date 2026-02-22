@@ -110,19 +110,6 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install Python linting and formatting tools globally using uv
 RUN uv pip install --system --break-system-packages --no-cache ruff black
 
-# Install ralph-tasks (markdown-based task management MCP server)
-COPY tasks/ /tmp/ralph-tasks/
-RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-tasks/ \
-    && rm -rf /tmp/ralph-tasks/
-
-# Install Ralph CLI (autonomous task execution with API recovery)
-# Strip [tool.uv.sources] — workspace references don't work outside uv workspace;
-# ralph-tasks is already installed above.
-COPY ralph-cli/ /tmp/ralph-cli/
-RUN sed -i '/\[tool.uv.sources\]/d; /ralph-tasks.*workspace.*true/d' /tmp/ralph-cli/pyproject.toml \
-    && uv pip install --system --break-system-packages --no-cache /tmp/ralph-cli/ \
-    && rm -rf /tmp/ralph-cli/
-
 # Install shfmt
 ENV SHFMT_VERSION=3.7.0
 RUN set -eux; \
@@ -216,6 +203,25 @@ RUN npm install -g @playwright/test
 
 # Install tmux plugins
 RUN /home/$USERNAME/.tmux/plugins/tpm/bin/install_plugins || true
+
+# Install ralph-tasks and ralph-cli late in the build to maximize cache hits.
+# These packages change frequently; everything above is stable infrastructure.
+USER root
+
+# Install ralph-tasks (markdown-based task management MCP server)
+COPY tasks/ /tmp/ralph-tasks/
+RUN uv pip install --system --break-system-packages --no-cache /tmp/ralph-tasks/ \
+    && rm -rf /tmp/ralph-tasks/
+
+# Install Ralph CLI (autonomous task execution with API recovery)
+# Strip [tool.uv.sources] — workspace references don't work outside uv workspace;
+# ralph-tasks is already installed above.
+COPY ralph-cli/ /tmp/ralph-cli/
+RUN sed -i '/\[tool.uv.sources\]/d; /ralph-tasks.*workspace.*true/d' /tmp/ralph-cli/pyproject.toml \
+    && uv pip install --system --break-system-packages --no-cache /tmp/ralph-cli/ \
+    && rm -rf /tmp/ralph-cli/
+
+USER $USERNAME
 
 # Copy all scripts with proper permissions (including subdirectories)
 COPY --chown=$USERNAME:$USERNAME --chmod=755 sandbox/ralph_sandbox/dockerfiles/devcontainer-base/scripts/*.sh /home/$USERNAME/scripts/
