@@ -281,23 +281,28 @@ def run_plan(
                 session_log.append(f"Completed: {task_ref}")
                 completed.append(task_num)
 
-                # Run Codex plan review
-                review_success, is_lgtm = run_codex_plan_review(
-                    task_ref=task_ref,
-                    project=project,
-                    task_number=task_num,
-                    working_dir=working_dir,
-                    log_dir=log_dir,
-                    settings=settings,
-                    session_log=session_log,
-                )
-                if not review_success:
-                    console.print("[yellow]⚠ Codex plan review could not run, skipping[/yellow]")
-                elif not is_lgtm:
-                    console.print(
-                        "[yellow]⚠ Plan has review issues — "
-                        "consider revising before implementation[/yellow]"
+                # Run Codex plan review (interactive)
+                if Confirm.ask(
+                    "[cyan]Run Codex plan review?[/cyan]", default=False
+                ):
+                    review_success, is_lgtm = run_codex_plan_review(
+                        task_ref=task_ref,
+                        project=project,
+                        task_number=task_num,
+                        working_dir=working_dir,
+                        log_dir=log_dir,
+                        settings=settings,
+                        session_log=session_log,
                     )
+                    if not review_success:
+                        console.print("[yellow]⚠ Codex plan review could not run, skipping[/yellow]")
+                    elif not is_lgtm:
+                        console.print(
+                            "[yellow]⚠ Plan has review issues — "
+                            "consider revising before implementation[/yellow]"
+                        )
+                else:
+                    session_log.append("Codex plan review: skipped by user")
             else:
                 console.print(f"[red]✗ Failed: {task_ref} (exit code {result.returncode})[/red]")
                 session_log.append(f"Failed: {task_ref} (exit code {result.returncode})")
