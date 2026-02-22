@@ -7,13 +7,6 @@ Review the plan for task {project}#{number}.
    - Implementation steps: are they realistic and in the right order?
    - Testing strategy: is it adequate for the changes?
    - Missing edge cases
-3. For each issue found, call:
-   add_review_finding(
-     project="{project}",
-     number={number},
-     review_type="plan",
-     text="<description of the issue>",
-     author="codex-plan-reviewer"
-   )
-4. If no issues found, do NOT create any findings.
-5. Do NOT modify any files.
+3. Print your findings as a structured list. For each issue state severity (CRITICAL/MEDIUM/LOW) and description.
+4. If no issues found, print "LGTM — plan covers all requirements."
+5. Do NOT modify any files or call any MCP tools besides reading the task.

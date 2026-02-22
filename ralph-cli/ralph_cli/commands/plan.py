@@ -18,24 +18,6 @@ from ..prompts import load_prompt
 console = Console()
 
 
-def _check_plan_lgtm(project: str, task_number: int) -> tuple[bool, int | None]:
-    """Check if plan review has no open findings (LGTM).
-
-    Returns (is_lgtm, open_findings_count).
-    On Neo4j failure returns (True, 0) — cannot verify, treat as passed.
-    """
-    try:
-        from ralph_tasks.core import list_review_findings
-
-        findings = list_review_findings(project, task_number, review_type="plan", status="open")
-        return len(findings) == 0, len(findings)
-    except Exception:
-        console.print(
-            "[yellow]⚠ Cannot verify plan findings (Neo4j unavailable), skipping[/yellow]"
-        )
-        return True, 0
-
-
 def run_codex_plan_review(
     task_ref: str,
     project: str,
@@ -44,32 +26,30 @@ def run_codex_plan_review(
     log_dir: Path,
     settings: Settings,
     session_log: SessionLog,
-) -> tuple[bool, bool]:
+) -> bool:
     """Run interactive Codex plan review.
 
     Launches Codex TUI with a pre-built prompt. User interacts directly.
     No pipes — Codex writes to terminal like Claude does.
+    Findings are printed to terminal (not saved to DB).
 
-    Returns (success, is_lgtm):
-        - (True, True) if review passed, disabled, or codex/prompt not available
-        - (True, False) if review found issues
-        - (False, False) if codex process failed
+    Returns True if codex ran successfully (or was skipped), False on failure.
     """
     if not settings.codex_plan_review_enabled:
         session_log.append("Codex plan review: disabled")
-        return True, True
+        return True
 
     if not shutil.which("codex"):
         console.print("[yellow]Codex not found in PATH, skipping plan review[/yellow]")
         session_log.append("Codex plan review: codex not found in PATH")
-        return True, True
+        return True
 
     try:
         prompt = load_prompt("codex-plan-reviewer", project=project, number=str(task_number))
     except (FileNotFoundError, KeyError) as e:
         console.print(f"[yellow]Codex plan review prompt unavailable, skipping: {e}[/yellow]")
         session_log.append(f"Codex plan review: prompt load error: {e}")
-        return True, True
+        return True
 
     cmd = ["codex", prompt]
 
@@ -85,23 +65,16 @@ def run_codex_plan_review(
         if result.returncode != 0:
             console.print(f"[red]✗ Codex plan review failed (exit {result.returncode}, {formatted})[/red]")
             session_log.append(f"Codex plan review failed: exit {result.returncode} ({formatted})")
-            return False, False
+            return False
 
-        is_lgtm, open_count = _check_plan_lgtm(project, task_number)
-
-        if is_lgtm:
-            console.print(f"[green]Plan review: LGTM ({formatted})[/green]")
-            session_log.append(f"Codex plan review: LGTM ({formatted})")
-        else:
-            console.print(f"[yellow]Plan review: {open_count} issue(s) found ({formatted})[/yellow]")
-            session_log.append(f"Codex plan review: {open_count} issue(s) ({formatted})")
-
-        return True, is_lgtm
+        console.print(f"[green]✓ Codex plan review done ({formatted})[/green]")
+        session_log.append(f"Codex plan review done ({formatted})")
+        return True
 
     except Exception as e:
         console.print(f"[red]Codex plan review error: {e}[/red]")
         session_log.append(f"Codex plan review error: {e}")
-        return False, False
+        return False
 
 
 def run_plan(
@@ -217,7 +190,7 @@ def run_plan(
                 if Confirm.ask(
                     "[cyan]Run Codex plan review?[/cyan]", default=False
                 ):
-                    review_success, is_lgtm = run_codex_plan_review(
+                    run_codex_plan_review(
                         task_ref=task_ref,
                         project=project,
                         task_number=task_num,
@@ -226,13 +199,6 @@ def run_plan(
                         settings=settings,
                         session_log=session_log,
                     )
-                    if not review_success:
-                        console.print("[yellow]⚠ Codex plan review could not run, skipping[/yellow]")
-                    elif not is_lgtm:
-                        console.print(
-                            "[yellow]⚠ Plan has review issues — "
-                            "consider revising before implementation[/yellow]"
-                        )
                 else:
                     session_log.append("Codex plan review: skipped by user")
             else:
