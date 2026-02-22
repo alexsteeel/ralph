@@ -5,6 +5,7 @@ from typing import Annotated
 
 import typer
 
+from . import __version__
 from .commands.logs import LogType, complete_log_files
 
 
@@ -30,8 +31,14 @@ def validate_task_numbers(values: list[str]) -> list[str]:
     return values
 
 
+def version_callback(value: bool) -> None:
+    """Print version and exit."""
+    if value:
+        typer.echo(f"ralph-cli {__version__}")
+        raise typer.Exit()
+
+
 app = typer.Typer(
-    help="Ralph - Autonomous task execution CLI",
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
@@ -42,6 +49,15 @@ logs_app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 app.add_typer(logs_app, name="logs")
+
+
+@app.callback()
+def main_callback(
+    version: bool | None = typer.Option(
+        None, "--version", callback=version_callback, is_eager=True, help="Show version and exit"
+    ),
+) -> None:
+    """Ralph - Autonomous task execution CLI."""
 
 
 @app.command()

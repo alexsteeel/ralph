@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- **ralph-cli, ralph-tasks: `--version` flag for CLI diagnostics** (#52)
+  - `ralph --version` → `ralph-cli {version}` (typer callback with `is_eager=True`)
+  - `ralph-tasks --version` → `ralph-tasks {version}` (sys.argv check in MCP entry point)
+  - `ralph-tasks-web --version` → `ralph-tasks-web {version}` (sys.argv check in web entry point)
+  - Version sourced from `importlib.metadata.version()` with `PackageNotFoundError` fallback to `"0.0.0"`
+  - Tests: 7 new tests (CliRunner, subprocess, fallback with mock)
+
 ### Fixed
 - **ralph-cli:** minor code quality issues (#67)
   - Removed duplicate `import re` from inside `_write()` method in `monitor.py` (moved to module level)

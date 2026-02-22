@@ -1,3 +1,8 @@
 """Ralph CLI — Autonomous task execution for Claude Code."""
 
-__version__ = "0.0.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("ralph-cli")
+except PackageNotFoundError:
+    __version__ = "0.0.0"

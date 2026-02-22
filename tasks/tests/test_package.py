@@ -6,7 +6,8 @@ from pathlib import Path
 def test_import():
     import ralph_tasks
 
-    assert ralph_tasks.__version__ == "0.0.1"
+    assert isinstance(ralph_tasks.__version__, str)
+    assert ralph_tasks.__version__  # non-empty
 
 
 def test_package_dir_exists():
