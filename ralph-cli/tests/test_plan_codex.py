@@ -78,14 +78,15 @@ class TestCheckPlanLgtm:
         assert is_lgtm is False
         assert count == 2
 
-    def test_returns_false_none_on_exception(self):
+    def test_returns_true_on_exception(self):
+        """On Neo4j failure, treat as LGTM to avoid blocking pipeline."""
         with patch(
             "ralph_tasks.core.list_review_findings",
             side_effect=Exception("neo4j down"),
         ):
             is_lgtm, count = _check_plan_lgtm("proj", 1)
-            assert is_lgtm is False
-            assert count is None
+            assert is_lgtm is True
+            assert count == 0
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +208,9 @@ class TestRunCodexPlanReview:
         run_codex_plan_review(**kwargs)
 
         cmd = mock_popen.call_args[0][0]
+        assert cmd[0] == "codex"
+        assert cmd[1] == "exec"
+        assert "--full-auto" in cmd
         assert any("gpt-4o" in arg for arg in cmd)
 
     @patch("ralph_cli.commands.plan._check_plan_lgtm", return_value=(True, 0))

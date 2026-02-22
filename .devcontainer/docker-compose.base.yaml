@@ -94,6 +94,10 @@ services:
       CLAUDE_CONFIG_DIR: /home/claude/.claude
       NODE_OPTIONS: --max-old-space-size=4096
       COPY_CLAUDE_SETTINGS: "true"
+      # Neo4j access for ralph-cli review chain (direct ralph_tasks.core calls)
+      NEO4J_URI: "bolt://ai-sbx-neo4j:7687"
+      NEO4J_USER: "neo4j"
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD:-neo4j-ai-sbx-password}"
     volumes:
       # Core volumes
       - ${PROJECT_DIR:-..}:/workspace
@@ -103,6 +107,7 @@ services:
       # User configuration volumes
       - ${HOME}/.ai-sbx:/host/.ai-sbx:ro
       - ${HOME}/.p10k.zsh:/host/.p10k.zsh:ro
+      - ${HOME}/.gitconfig:/host/.gitconfig:ro
       - ${HOME}/.claude:/host/.claude:ro
       - ${HOME}/.claude/projects/:/home/claude/.claude/projects
       - ${HOME}/.ai-sbx/codex:/host/.codex:ro

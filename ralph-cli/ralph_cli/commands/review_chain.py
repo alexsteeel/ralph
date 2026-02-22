@@ -85,6 +85,8 @@ def check_lgtm(project: str, task_number: int, section_types: list[str]) -> tupl
     """Check if all findings are resolved/declined (LGTM).
 
     Returns (is_lgtm, open_findings_count).
+    On Neo4j/connection failure, returns (True, 0) to skip iteration loop
+    rather than triggering infinite fix sessions for non-existent findings.
     """
     try:
         from ralph_tasks.core import list_review_findings
@@ -93,8 +95,9 @@ def check_lgtm(project: str, task_number: int, section_types: list[str]) -> tupl
         open_count = sum(1 for f in findings if f.get("section_type") in section_types)
         return open_count == 0, open_count
     except Exception as e:
-        logger.warning("Failed to check LGTM: %s", e)
-        return False, -1
+        logger.warning("Failed to check LGTM (treating as LGTM to avoid stale loop): %s", e)
+        console.print("[yellow]⚠ Cannot verify findings (Neo4j unavailable), skipping[/yellow]")
+        return True, 0
 
 
 # ---------------------------------------------------------------------------

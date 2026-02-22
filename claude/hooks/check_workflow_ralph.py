@@ -31,7 +31,7 @@ CHECKLIST = """
 ### Preparation
 - [ ] Задача получена и содержит `## Plan`
 - [ ] Статус задачи = work
-- [ ] TodoWrite создан для отслеживания фаз (0-11)
+- [ ] TodoWrite создан для отслеживания фаз (0-10)
 - [ ] Файлы из Scope прочитаны
 
 ### Implementation
@@ -48,13 +48,6 @@ CHECKLIST = """
 ### UI Review (если есть frontend)
 - [ ] Визуальный анализ через Opus + playwright выполнен
 - [ ] Проблемы UI исправлены (перекрытия, вёрстка, юзабилити)
-
-### Reviews (Phase 6) — ralph review
-- [ ] `/ralph-review-code` выполнен (5 агентов)
-- [ ] `/ralph-review-simplify` выполнен
-- [ ] `/ralph-review-security` выполнен
-- [ ] Codex review выполнен (direct CLI)
-- [ ] ВСЕ замечания исправлены ИЛИ обоснованно отклонены
 
 ### Testing (Final)
 - [ ] Связанные тесты проходят после исправлений

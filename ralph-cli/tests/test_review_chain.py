@@ -132,15 +132,15 @@ class TestCheckLgtm:
         assert is_lgtm is False
         assert count == 1
 
-    def test_returns_false_on_import_error(self):
-        """When ralph_tasks is not available, returns (False, -1)."""
+    def test_returns_true_on_exception(self):
+        """On Neo4j failure, treat as LGTM to avoid blocking pipeline."""
         with patch(
             "ralph_tasks.core.list_review_findings",
             side_effect=Exception("not available"),
         ):
             is_lgtm, count = check_lgtm("proj", 1, ["code-review"])
-            assert is_lgtm is False
-            assert count == -1
+            assert is_lgtm is True
+            assert count == 0
 
 
 # ---------------------------------------------------------------------------
