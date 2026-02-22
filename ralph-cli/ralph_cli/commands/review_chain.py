@@ -81,10 +81,10 @@ def _log_path(ctx: ReviewChainContext, name: str, suffix: str = "") -> Path:
 # ---------------------------------------------------------------------------
 
 
-def check_lgtm(project: str, task_number: int, section_types: list[str]) -> tuple[bool, int]:
+def check_lgtm(project: str, task_number: int, section_types: list[str]) -> tuple[bool, int | None]:
     """Check if all findings are resolved/declined (LGTM).
 
-    Returns (is_lgtm, open_findings_count).
+    Returns (is_lgtm, open_count), or (False, None) on error.
     """
     try:
         from ralph_tasks.core import list_review_findings
@@ -94,7 +94,7 @@ def check_lgtm(project: str, task_number: int, section_types: list[str]) -> tupl
         return open_count == 0, open_count
     except Exception as e:
         logger.warning("Failed to check LGTM: %s", e)
-        return False, -1
+        return False, None
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- **ralph-cli:** minor code quality issues (#67)
+  - Removed duplicate `import re` from inside `_write()` method in `monitor.py` (moved to module level)
+  - Standardized `check_lgtm()` error return from `(False, -1)` to `(False, None)` matching `_check_plan_lgtm()` pattern
+  - Updated `recovery_delays` default from `[600, 1200, 1800]` to `[3600, 7200, 10800]` to match documentation
+  - Improved `check_lgtm()` docstring to document `None` return on error
+
 ### Removed
 - **ralph-cli:** dead code `create_branch()` and `switch_branch()` from `git.py` (#63)
 
