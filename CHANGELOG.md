@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Removed
+- **ralph-sandbox:** "Open in IDE" option from `ai-sbx worktree connect` (#70)
+  - Removed `--ide` CLI option, IDE preference loading, and IDE menu choices
+  - Simplified connect menu to: shell, cd, cancel
+  - IDE utilities remain for `worktree create` (cleanup tracked in #55, #79)
+
 ### Changed
 - **ralph-cli: externalize hardcoded Codex plan prompt to `prompts/`** (#64)
   - Extracted `_build_codex_plan_prompt()` f-string to `prompts/codex-plan-reviewer.md` template
