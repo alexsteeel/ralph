@@ -5,7 +5,12 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, Template
 
-from ralph_sandbox.config import DEFAULT_IMAGE_TAG, BaseImage, ProjectConfig, get_default_whitelist_domains
+from ralph_sandbox.config import (
+    DEFAULT_IMAGE_TAG,
+    BaseImage,
+    ProjectConfig,
+    get_default_whitelist_domains,
+)
 from ralph_sandbox.utils import logger
 
 

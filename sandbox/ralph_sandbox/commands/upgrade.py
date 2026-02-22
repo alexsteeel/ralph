@@ -28,7 +28,6 @@ def run_upgrade(console: Console, verbose: bool = False) -> None:
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-
         # Check for updates
         task = progress.add_task("Checking for updates...", total=None)
 

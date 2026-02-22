@@ -448,9 +448,7 @@ def init_global(
 
         if "ai-sbx-docker-proxy" not in result.stdout:
             # Use system location for docker-proxy
-            proxy_compose = (
-                Path.home() / ".ai-sbx" / "docker-proxy" / "docker-compose.yaml"
-            )
+            proxy_compose = Path.home() / ".ai-sbx" / "docker-proxy" / "docker-compose.yaml"
 
             if proxy_compose.exists():
                 console.print("[dim]Starting docker-registry-proxy for image caching...[/dim]")
@@ -1146,9 +1144,7 @@ def init_project(
             import shutil
 
             shutil.copy2(base_source, compose_base)
-            progress.update(
-                task, description="[green]✓[/green] Copied docker-compose.base.yaml"
-            )
+            progress.update(task, description="[green]✓[/green] Copied docker-compose.base.yaml")
         else:
             progress.update(
                 task, description="[yellow]⚠[/yellow] docker-compose.base.yaml already exists"
@@ -1167,9 +1163,7 @@ def init_project(
         if _regenerate_derived_files(console, project_path, config, verbose):
             progress.update(task, description="[green]✓[/green] Derived files updated")
         else:
-            progress.update(
-                task, description="[yellow]⚠[/yellow] Could not update derived files"
-            )
+            progress.update(task, description="[yellow]⚠[/yellow] Could not update derived files")
 
         # Create init.secure.sh if requested
         if "create_secure_init" in locals() and create_secure_init:
