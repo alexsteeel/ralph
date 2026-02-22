@@ -9,12 +9,14 @@ Optimized 3-tool design:
 
 from __future__ import annotations
 
+import sys
 import tempfile
 from pathlib import Path
 
 from fastmcp import FastMCP
 from starlette.applications import Starlette
 
+from . import __version__
 from .core import add_review_finding as _add_review_finding
 from .core import (
     copy_attachment,
@@ -431,7 +433,10 @@ def get_mcp_http_app() -> Starlette:
 
 
 def main():
-    """Run the MCP server (stdio transport for local Claude Code)."""
+    """Entry point for the MCP server (stdio transport for local Claude Code)."""
+    if "--version" in sys.argv:
+        print(f"ralph-tasks {__version__}")
+        sys.exit(0)
     mcp.run()
 
 

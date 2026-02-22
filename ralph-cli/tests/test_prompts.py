@@ -50,6 +50,7 @@ class TestLoadPrompt:
             "code-simplifier",
             "security-reviewer",
             "codex-reviewer",
+            "codex-plan-reviewer",
             "finalization",
         ]
         for name in prompts:

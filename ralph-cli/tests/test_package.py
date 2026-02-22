@@ -6,7 +6,8 @@ from pathlib import Path
 def test_import():
     import ralph_cli
 
-    assert ralph_cli.__version__ == "0.0.1"
+    assert isinstance(ralph_cli.__version__, str)
+    assert ralph_cli.__version__  # non-empty
 
 
 def test_package_dir_exists():

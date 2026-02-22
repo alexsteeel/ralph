@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from . import __version__
 from .core import (
     Task,
     delete_attachment,
@@ -481,7 +482,10 @@ async def delete_attachment_endpoint(project: str, number: int, filename: str):
 
 
 def main():
-    """Run the web server."""
+    """Entry point for the web server."""
+    if "--version" in sys.argv:
+        print(f"ralph-tasks-web {__version__}")
+        sys.exit(0)
     host = os.environ.get("RALPH_TASKS_HOST", "127.0.0.1")
     port = int(os.environ.get("RALPH_TASKS_PORT", "8000"))
     uvicorn.run(app, host=host, port=port)

@@ -1,4 +1,4 @@
-"""Prompt loading utility for review agents."""
+"""Prompt loading utility for CLI agents."""
 
 from pathlib import Path
 

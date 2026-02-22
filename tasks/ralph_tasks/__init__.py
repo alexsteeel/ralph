@@ -1,3 +1,8 @@
 """Ralph Tasks — Markdown-based task management."""
 
-__version__ = "0.0.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("ralph-tasks")
+except PackageNotFoundError:
+    __version__ = "0.0.0"

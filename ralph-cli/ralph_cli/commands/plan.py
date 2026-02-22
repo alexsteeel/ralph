@@ -13,36 +13,9 @@ from ..config import Settings, get_settings
 from ..executor import expand_task_ranges
 from ..git import cleanup_working_dir, get_current_branch, get_files_to_clean
 from ..logging import SessionLog, format_duration
+from ..prompts import load_prompt
 
 console = Console()
-
-
-def _build_codex_plan_prompt(project: str, task_number: int) -> str:
-    """Build prompt for Codex plan review.
-
-    Instructs Codex to read the task via MCP and validate the plan
-    against the body requirements, recording findings via add_review_finding.
-    """
-    return (
-        f"Review the plan for task {project}#{task_number}.\n\n"
-        f'1. Read the task using MCP tool: tasks(project="{project}", number={task_number})\n'
-        "2. Compare the plan against the body (requirements). Check:\n"
-        "   - Completeness: does the plan cover ALL requirements from the body?\n"
-        "   - Scope correctness: do referenced files/functions exist?\n"
-        "   - Implementation steps: are they realistic and in the right order?\n"
-        "   - Testing strategy: is it adequate for the changes?\n"
-        "   - Missing edge cases\n"
-        "3. For each issue found, call:\n"
-        "   add_review_finding(\n"
-        f'     project="{project}",\n'
-        f"     number={task_number},\n"
-        '     review_type="plan",\n'
-        '     text="<description of the issue>",\n'
-        '     author="codex-plan-reviewer"\n'
-        "   )\n"
-        "4. If no issues found, do NOT create any findings.\n"
-        "5. Do NOT modify any files.\n"
-    )
 
 
 def _check_plan_lgtm(project: str, task_number: int) -> tuple[bool, int | None]:
@@ -56,8 +29,10 @@ def _check_plan_lgtm(project: str, task_number: int) -> tuple[bool, int | None]:
 
         findings = list_review_findings(project, task_number, review_type="plan", status="open")
         return len(findings) == 0, len(findings)
-    except Exception as e:
-        console.print(f"[yellow]⚠ Cannot verify plan findings (Neo4j unavailable), skipping[/yellow]")
+    except Exception:
+        console.print(
+            "[yellow]⚠ Cannot verify plan findings (Neo4j unavailable), skipping[/yellow]"
+        )
         return True, 0
 
 
@@ -76,7 +51,7 @@ def run_codex_plan_review(
     No pipes — Codex writes to terminal like Claude does.
 
     Returns (success, is_lgtm):
-        - (True, True) if review passed, disabled, or codex not available
+        - (True, True) if review passed, disabled, or codex/prompt not available
         - (True, False) if review found issues
         - (False, False) if codex process failed
     """
@@ -89,7 +64,12 @@ def run_codex_plan_review(
         session_log.append("Codex plan review: codex not found in PATH")
         return True, True
 
-    prompt = _build_codex_plan_prompt(project, task_number)
+    try:
+        prompt = load_prompt("codex-plan-reviewer", project=project, number=str(task_number))
+    except (FileNotFoundError, KeyError) as e:
+        console.print(f"[yellow]Codex plan review prompt unavailable, skipping: {e}[/yellow]")
+        session_log.append(f"Codex plan review: prompt load error: {e}")
+        return True, True
 
     cmd = ["codex", prompt]
 
