@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Removed
+- **ralph-cli:** dead code `create_branch()` and `switch_branch()` from `git.py` (#63)
+
 ### Added
 - **claude: code-audit skill for automated codebase analysis** (#40)
   - New skill `claude/skills/code-audit.md` — automated codebase audit with task generation

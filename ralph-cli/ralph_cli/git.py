@@ -177,31 +177,3 @@ def get_current_branch(working_dir: Path) -> str | None:
     except TypeError:
         # Detached HEAD state
         return None
-
-
-def create_branch(working_dir: Path, branch_name: str) -> bool:
-    """Create and switch to new branch."""
-    repo = get_repo(working_dir)
-    if not repo:
-        return False
-
-    try:
-        repo.git.checkout("-b", branch_name)
-        return True
-    except GitCommandError as e:
-        logger.debug("create_branch failed: %s", e)
-        return False
-
-
-def switch_branch(working_dir: Path, branch_name: str) -> bool:
-    """Switch to existing branch."""
-    repo = get_repo(working_dir)
-    if not repo:
-        return False
-
-    try:
-        repo.git.checkout(branch_name)
-        return True
-    except GitCommandError as e:
-        logger.debug("switch_branch failed: %s", e)
-        return False
