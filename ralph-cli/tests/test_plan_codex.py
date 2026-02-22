@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from ralph_cli.commands.plan import run_codex_plan_review
+from ralph_cli.commands.plan import FlexibleConfirm, run_codex_plan_review
 from ralph_cli.config import Settings
 from ralph_cli.prompts import load_prompt
 
@@ -133,6 +133,35 @@ class TestRunCodexPlanReview:
         assert "exec" not in cmd
         assert "--full-auto" not in cmd
         assert "proj" in cmd[-1]
+
+
+# ---------------------------------------------------------------------------
+# Config: codex_plan_review_enabled
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# FlexibleConfirm
+# ---------------------------------------------------------------------------
+
+
+class TestFlexibleConfirm:
+    @pytest.mark.parametrize("value", ["y", "Y", "yes", "Yes", "YES", "да", "Да", "д", "1", "true"])
+    def test_accepts_yes_variants(self, value):
+        c = FlexibleConfirm("")
+        assert c.process_response(value) is True
+
+    @pytest.mark.parametrize("value", ["n", "N", "no", "No", "NO", "нет", "Нет", "н", "0", "false"])
+    def test_accepts_no_variants(self, value):
+        c = FlexibleConfirm("")
+        assert c.process_response(value) is False
+
+    def test_rejects_invalid(self):
+        from rich.prompt import InvalidResponse
+
+        c = FlexibleConfirm("")
+        with pytest.raises(InvalidResponse):
+            c.process_response("maybe")
 
 
 # ---------------------------------------------------------------------------

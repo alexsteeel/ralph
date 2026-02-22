@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from rich.console import Console
-from rich.prompt import Confirm
+from rich.prompt import Confirm, InvalidResponse
 
 from ..config import Settings, get_settings
 from ..executor import expand_task_ranges
@@ -16,6 +16,21 @@ from ..logging import SessionLog, format_duration
 from ..prompts import load_prompt
 
 console = Console()
+
+_YES = {"y", "yes", "да", "д", "1", "true"}
+_NO = {"n", "no", "нет", "н", "0", "false"}
+
+
+class FlexibleConfirm(Confirm):
+    """Confirm prompt that accepts yes/no/да/нет and other common variants."""
+
+    def process_response(self, value: str) -> bool:
+        v = value.strip().lower()
+        if v in _YES:
+            return True
+        if v in _NO:
+            return False
+        raise InvalidResponse(self.validate_error_message)
 
 
 def run_codex_plan_review(
@@ -116,7 +131,7 @@ def run_plan(
     current_branch = get_current_branch(working_dir)
     if current_branch in ("master", "main"):
         console.print(f"\n[bold red]Warning: You are on '{current_branch}' branch![/bold red]")
-        if not Confirm.ask("[yellow]Are you sure you want to continue?[/yellow]", default=False):
+        if not FlexibleConfirm.ask("[yellow]Are you sure you want to continue?[/yellow]", default=False):
             console.print("[yellow]Pipeline stopped.[/yellow]")
             session_log.append(f"Pipeline stopped: user declined to continue on {current_branch}")
             return 1
@@ -147,7 +162,7 @@ def run_plan(
                     console.print(f"  [green]?[/green] {f}")
 
             console.print()
-            if not Confirm.ask("[yellow]Delete these files?[/yellow]", default=False):
+            if not FlexibleConfirm.ask("[yellow]Delete these files?[/yellow]", default=False):
                 console.print(
                     "\n[red]Pipeline stopped.[/red]\n"
                     "[yellow]Commit or stash your changes before running ralph plan.[/yellow]"
@@ -187,7 +202,7 @@ def run_plan(
                 completed.append(task_num)
 
                 # Run Codex plan review (interactive)
-                if Confirm.ask(
+                if FlexibleConfirm.ask(
                     "[cyan]Run Codex plan review?[/cyan]", default=False
                 ):
                     run_codex_plan_review(
