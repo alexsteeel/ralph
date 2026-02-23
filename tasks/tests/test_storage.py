@@ -5,6 +5,7 @@ from ralph_tasks.storage import (
     _object_key,
     _object_prefix,
     _sanitize_key_component,
+    sanitize_filename,
 )
 
 
@@ -55,6 +56,49 @@ class TestStorageSanitization:
 
         with pytest.raises(ValueError):
             _object_prefix("...", 1)
+
+
+class TestSanitizeFilename:
+    """Unit tests for the public sanitize_filename() function."""
+
+    def test_simple_filename_unchanged(self):
+        assert sanitize_filename("readme.txt") == "readme.txt"
+
+    def test_strips_directory_components(self):
+        assert sanitize_filename("/etc/passwd") == "passwd"
+        assert sanitize_filename("../../etc/passwd") == "passwd"
+
+    def test_strips_leading_dots(self):
+        assert sanitize_filename(".hidden") == "hidden"
+        assert sanitize_filename("..htaccess") == "htaccess"
+
+    def test_strips_null_bytes(self):
+        assert sanitize_filename("test\x00file.txt") == "testfile.txt"
+
+    def test_preserves_internal_dots(self):
+        assert sanitize_filename("archive.tar.gz") == "archive.tar.gz"
+
+    def test_empty_string_raises(self):
+        with pytest.raises(ValueError, match="Invalid filename"):
+            sanitize_filename("")
+
+    def test_only_dots_raises(self):
+        with pytest.raises(ValueError, match="Invalid filename"):
+            sanitize_filename("...")
+
+    def test_only_slashes_raises(self):
+        with pytest.raises(ValueError, match="Invalid filename"):
+            sanitize_filename("///")
+
+    def test_dot_slash_combo_raises(self):
+        with pytest.raises(ValueError, match="Invalid filename"):
+            sanitize_filename("../.")
+
+    def test_windows_backslash_path(self):
+        # On Linux, Path.name doesn't split on backslash;
+        # _sanitize_key_component strips them — no raw backslash in result
+        result = sanitize_filename("C:\\Windows\\passwd")
+        assert "\\" not in result
 
 
 @pytest.mark.minio

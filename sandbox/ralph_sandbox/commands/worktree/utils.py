@@ -206,10 +206,9 @@ def open_ide(worktree_path: Path, ide: IDE, console: Console, verbose: bool = Fa
         console.print("[cyan]Preparing DevContainer environment...[/cyan]")
 
         # Check for required Docker images
-        from ralph_sandbox.utils import check_docker_images, prompt_build_images
-
         # Get the image tag from environment or use default
         from ralph_sandbox.config import DEFAULT_IMAGE_TAG
+        from ralph_sandbox.utils import check_docker_images, prompt_build_images
 
         image_tag = os.environ.get("IMAGE_TAG", DEFAULT_IMAGE_TAG)
         required_images = [

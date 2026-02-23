@@ -562,9 +562,7 @@ def save_attachment(project: str, number: int, filename: str, content: bytes) ->
     Returns {"name": str, "size": int}.
     """
     project = normalize_project_name(project)
-    safe_filename = Path(filename).name
-    if not safe_filename:
-        raise ValueError("Invalid filename")
+    safe_filename = storage.sanitize_filename(filename)
 
     result = storage.put_bytes(project, number, safe_filename, content)
     logger.info(
@@ -585,9 +583,7 @@ def copy_attachment(
     if not source.exists():
         raise FileNotFoundError(f"Source file not found: {source_path}")
 
-    target_filename = Path(filename).name if filename else source.name
-    if not target_filename:
-        raise ValueError("Invalid filename")
+    target_filename = storage.sanitize_filename(filename if filename else source.name)
 
     content = source.read_bytes()
     result = storage.put_bytes(project, number, target_filename, content)
@@ -598,16 +594,12 @@ def copy_attachment(
 def get_attachment_bytes(project: str, number: int, filename: str) -> bytes | None:
     """Get attachment content from MinIO. Returns None if not found."""
     project = normalize_project_name(project)
-    safe_filename = Path(filename).name
-    if not safe_filename:
-        return None
+    safe_filename = storage.sanitize_filename(filename)
     return storage.get_object(project, number, safe_filename)
 
 
 def delete_attachment(project: str, number: int, filename: str) -> bool:
     """Delete an attachment from MinIO. Returns True if deleted."""
     project = normalize_project_name(project)
-    safe_filename = Path(filename).name
-    if not safe_filename:
-        return False
+    safe_filename = storage.sanitize_filename(filename)
     return storage.delete_object(project, number, safe_filename)
