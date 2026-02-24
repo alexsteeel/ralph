@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     codex_review_model: str = "gpt-5.3-codex"
     codex_plan_review_enabled: bool = True
 
+    # Metrics
+    ralph_tasks_api_url: str | None = None
+    ralph_tasks_api_key: str | None = None
+
     # Paths
     log_dir: Path = Field(default=Path.home() / ".claude/logs")
 

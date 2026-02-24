@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- **ralph-cli: fire-and-forget metrics submission + cost tracking fix** (#85)
+  - New `ralph_cli/metrics.py` — fire-and-forget HTTP client for `POST /api/metrics/sessions`
+  - Settings: `ralph_tasks_api_url`, `ralph_tasks_api_key` in `config.py` (None by default = disabled)
+  - Metrics integration in `implement.py` (full cost/tokens), `plan.py` and `interview.py` (minimal: timestamps, exit_code)
+  - Cost tracking fix in `review_chain.py`: all functions now propagate `cost_usd` through returns
+  - New `ReviewChainResult` dataclass replaces bare `bool` return from `run_review_chain()`
+  - Review chain cost aggregated into task totals in `implement.py`
+  - 10 new metrics tests, 8 updated review chain tests (new signatures + cost verification)
 - **tasks: metrics dashboard UI** (#84)
   - Full Chart.js dashboard at `/dashboard` with dark theme
   - Summary cards: Total Cost, Sessions, Success Rate, Avg Cost/Task, Total Tokens, Failed

@@ -10,6 +10,7 @@ from ..config import get_settings
 from ..executor import expand_task_ranges
 from ..git import get_current_branch
 from ..logging import SessionLog, format_duration
+from ..metrics import submit_session_metrics
 
 console = Console()
 
@@ -104,5 +105,14 @@ def run_interview(
     console.print(f"Duration: [green]{duration}[/green]")
     console.print(f"Completed: [green]{len(completed)}[/green]")
     console.print(f"Failed: [red]{len(failed)}[/red]")
+
+    # Submit metrics (minimal — no cost/tokens in TUI mode)
+    submit_session_metrics(
+        command_type="interview",
+        project=project,
+        started_at=start_time,
+        finished_at=datetime.now(),
+        exit_code=0 if not failed else 1,
+    )
 
     return 0 if not failed else 1

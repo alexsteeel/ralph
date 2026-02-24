@@ -52,6 +52,15 @@ class ReviewPhaseResult:
     error: str | None = None
 
 
+@dataclass
+class ReviewChainResult:
+    """Result of the full review chain."""
+
+    success: bool
+    total_cost_usd: float = 0.0
+    phase_results: dict[str, ReviewPhaseResult] | None = None
+
+
 # Code review agent definitions: (agent_name, review_type, author)
 CODE_REVIEW_AGENTS = [
     ("code-reviewer", "code-review", "code-reviewer"),
@@ -156,8 +165,11 @@ def run_fix_session(
     ctx: ReviewChainContext,
     section_types: list[str],
     iteration: int,
-) -> bool:
-    """Resume main session to fix review findings. Returns True if succeeded."""
+) -> tuple[bool, float]:
+    """Resume main session to fix review findings.
+
+    Returns (success, cost_usd).
+    """
     prompt = load_prompt(
         "fix-review-issues",
         task_ref=ctx.task_ref,
@@ -185,10 +197,10 @@ def run_fix_session(
             f"[green]Fix done ({format_duration(result.duration_seconds)}, "
             f"${result.cost_usd:.2f})[/green]"
         )
-        return True
+        return True, result.cost_usd
 
     console.print(f"[red]Fix failed: {result.error_type.value}[/red]")
-    return False
+    return False, result.cost_usd
 
 
 # ---------------------------------------------------------------------------
@@ -202,10 +214,10 @@ def run_single_review_agent(
     review_type: str,
     author: str | None = None,
     prompt_name: str = "review-agent",
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, float]:
     """Run a single review agent as a Claude session.
 
-    Returns (success, session_id).
+    Returns (success, session_id, cost_usd).
     """
     author = author or agent_name
     try:
@@ -220,7 +232,7 @@ def run_single_review_agent(
         )
     except FileNotFoundError as e:
         logger.error("Prompt not found: %s", e)
-        return False, None
+        return False, None, 0.0
 
     log_path = _log_path(ctx, agent_name)
 
@@ -235,10 +247,10 @@ def run_single_review_agent(
         console.print(
             f"[green]✓ {agent_name} done ({format_duration(result.duration_seconds)})[/green]"
         )
-        return True, result.session_id
+        return True, result.session_id, result.cost_usd
 
     console.print(f"[red]✗ {agent_name} failed: {result.error_type.value}[/red]")
-    return False, result.session_id
+    return False, result.session_id, result.cost_usd
 
 
 def _run_agent_with_retry(
@@ -247,16 +259,21 @@ def _run_agent_with_retry(
     review_type: str,
     author: str | None = None,
     prompt_name: str = "review-agent",
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, float]:
     """Run review agent with one retry on failure."""
-    success, session_id = run_single_review_agent(ctx, agent_name, review_type, author, prompt_name)
+    success, session_id, cost = run_single_review_agent(
+        ctx, agent_name, review_type, author, prompt_name
+    )
     if success:
-        return True, session_id
+        return True, session_id, cost
 
     console.print(f"[yellow]Retrying {agent_name}...[/yellow]")
     with ctx._lock:
         ctx.session_log.append(f"Retrying {agent_name} after failure")
-    return run_single_review_agent(ctx, agent_name, review_type, author, prompt_name)
+    retry_success, retry_sid, retry_cost = run_single_review_agent(
+        ctx, agent_name, review_type, author, prompt_name
+    )
+    return retry_success, retry_sid, cost + retry_cost
 
 
 # ---------------------------------------------------------------------------
@@ -266,12 +283,14 @@ def _run_agent_with_retry(
 
 def run_parallel_code_reviews(
     ctx: ReviewChainContext,
-) -> dict[str, tuple[bool, str | None]]:
+) -> tuple[dict[str, tuple[bool, str | None]], float]:
     """Run 4 code review agents in parallel.
 
-    Returns dict of {agent_name: (success, session_id)}.
+    Returns (results_dict, total_cost) where results_dict is
+    {agent_name: (success, session_id)}.
     """
     results: dict[str, tuple[bool, str | None]] = {}
+    total_cost = 0.0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = {
@@ -285,8 +304,9 @@ def run_parallel_code_reviews(
         for future in concurrent.futures.as_completed(futures):
             agent_name, review_type = futures[future]
             try:
-                success, session_id = future.result()
+                success, session_id, cost = future.result()
                 results[agent_name] = (success, session_id)
+                total_cost += cost
                 if session_id:
                     with ctx._lock:
                         ctx.review_session_ids[agent_name] = session_id
@@ -294,16 +314,21 @@ def run_parallel_code_reviews(
                 logger.error("Agent %s raised exception: %s", agent_name, e)
                 results[agent_name] = (False, None)
 
-    return results
+    return results, total_cost
 
 
-def _resume_reviewers(ctx: ReviewChainContext, iteration: int) -> None:
-    """Resume each code reviewer to re-check after fixes."""
+def _resume_reviewers(ctx: ReviewChainContext, iteration: int) -> float:
+    """Resume each code reviewer to re-check after fixes.
+
+    Returns total cost of all re-review sessions.
+    """
+    total_cost = 0.0
     for agent_name, review_type, author in CODE_REVIEW_AGENTS:
         session_id = ctx.review_session_ids.get(agent_name)
         if not session_id:
             # No session to resume — run fresh
-            success, sid = run_single_review_agent(ctx, agent_name, review_type, author)
+            success, sid, cost = run_single_review_agent(ctx, agent_name, review_type, author)
+            total_cost += cost
             if sid:
                 ctx.review_session_ids[agent_name] = sid
             continue
@@ -322,6 +347,7 @@ def _resume_reviewers(ctx: ReviewChainContext, iteration: int) -> None:
             resume_session=session_id,
         )
 
+        total_cost += result.cost_usd
         if result.session_id:
             ctx.review_session_ids[agent_name] = result.session_id
 
@@ -331,6 +357,7 @@ def _resume_reviewers(ctx: ReviewChainContext, iteration: int) -> None:
             console.print(
                 f"[yellow]⚠ {agent_name} re-review failed: {result.error_type.value}[/yellow]"
             )
+    return total_cost
 
 
 # ---------------------------------------------------------------------------
@@ -341,17 +368,21 @@ def _resume_reviewers(ctx: ReviewChainContext, iteration: int) -> None:
 def run_code_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
     """Run 4 parallel code review agents with iterative fix cycle."""
     max_iter = ctx.settings.code_review_max_iterations
+    phase_cost = 0.0
 
     console.rule(f"[cyan]Code Review Group: {ctx.task_ref}[/cyan]")
     ctx.session_log.append("Code review group started")
 
     # Initial parallel review
-    results = run_parallel_code_reviews(ctx)
+    results, review_cost = run_parallel_code_reviews(ctx)
+    phase_cost += review_cost
     succeeded = sum(1 for s, _ in results.values() if s)
 
     if succeeded == 0:
         ctx.session_log.append("Code review: all agents failed")
-        return ReviewPhaseResult(success=False, error="All review agents failed")
+        return ReviewPhaseResult(
+            success=False, cost_usd=phase_cost, error="All review agents failed"
+        )
 
     ctx.session_log.append(f"Code review: {succeeded}/{len(results)} agents succeeded")
 
@@ -364,7 +395,7 @@ def run_code_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
                 create_fixup_commit(ctx.working_dir, ctx.session_log, "code review fixes")
             ctx.session_log.append(f"Code review LGTM after {iteration} iteration(s)")
             console.print("[green]✓ Code Review Group: LGTM[/green]")
-            return ReviewPhaseResult(success=True, lgtm=True)
+            return ReviewPhaseResult(success=True, lgtm=True, cost_usd=phase_cost)
 
         console.print(f"[yellow]Code review: {open_count} open findings[/yellow]")
 
@@ -372,13 +403,15 @@ def run_code_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
             break
 
         # Fix via main session
-        fix_ok = run_fix_session(ctx, CODE_REVIEW_SECTION_TYPES, iteration)
+        fix_ok, fix_cost = run_fix_session(ctx, CODE_REVIEW_SECTION_TYPES, iteration)
+        phase_cost += fix_cost
         if not fix_ok:
             ctx.session_log.append(f"Code review fix failed at iteration {iteration}")
-            return ReviewPhaseResult(success=False, error="Fix session failed")
+            return ReviewPhaseResult(success=False, cost_usd=phase_cost, error="Fix session failed")
 
         # Re-review
-        _resume_reviewers(ctx, iteration + 1)
+        resume_cost = _resume_reviewers(ctx, iteration + 1)
+        phase_cost += resume_cost
 
     # Max iterations reached
     create_fixup_commit(ctx.working_dir, ctx.session_log, "code review fixes")
@@ -386,7 +419,9 @@ def run_code_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
         f"Code review: max iterations ({max_iter}) reached, {open_count} findings remain"
     )
     console.print("[yellow]⚠ Code Review: max iterations reached[/yellow]")
-    return ReviewPhaseResult(success=True, lgtm=False, findings_count=open_count)
+    return ReviewPhaseResult(
+        success=True, lgtm=False, cost_usd=phase_cost, findings_count=open_count
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +465,7 @@ def run_simplifier_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
 
     console.print(f"[red]✗ Simplifier failed: {result.error_type.value}[/red]")
     ctx.session_log.append(f"Code simplifier failed: {result.error_type.value}")
-    return ReviewPhaseResult(success=False, error=result.error_type.value)
+    return ReviewPhaseResult(success=False, error=result.error_type.value, cost_usd=result.cost_usd)
 
 
 # ---------------------------------------------------------------------------
@@ -442,19 +477,23 @@ def run_security_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
     """Run security review with iterative fix cycle."""
     max_iter = ctx.settings.security_review_max_iterations
     section_types = ["security-review"]
+    phase_cost = 0.0
 
     console.rule(f"[cyan]Security Review: {ctx.task_ref}[/cyan]")
     ctx.session_log.append("Security review started")
 
     # Initial review
-    success, session_id = _run_agent_with_retry(
+    success, session_id, agent_cost = _run_agent_with_retry(
         ctx, "security-reviewer", "security-review", prompt_name="security-reviewer"
     )
+    phase_cost += agent_cost
     ctx.review_session_ids["security-reviewer"] = session_id
 
     if not success:
         ctx.session_log.append("Security review: agent failed")
-        return ReviewPhaseResult(success=False, error="Security reviewer failed")
+        return ReviewPhaseResult(
+            success=False, cost_usd=phase_cost, error="Security reviewer failed"
+        )
 
     open_count = 0
     for iteration in range(1, max_iter + 1):
@@ -465,7 +504,7 @@ def run_security_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
                 create_fixup_commit(ctx.working_dir, ctx.session_log, "security fixes")
             ctx.session_log.append(f"Security review LGTM after {iteration} iteration(s)")
             console.print("[green]✓ Security Review: LGTM[/green]")
-            return ReviewPhaseResult(success=True, lgtm=True)
+            return ReviewPhaseResult(success=True, lgtm=True, cost_usd=phase_cost)
 
         console.print(f"[yellow]Security review: {open_count} open findings[/yellow]")
 
@@ -473,10 +512,11 @@ def run_security_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
             break
 
         # Fix via main session
-        fix_ok = run_fix_session(ctx, section_types, iteration)
+        fix_ok, fix_cost = run_fix_session(ctx, section_types, iteration)
+        phase_cost += fix_cost
         if not fix_ok:
             ctx.session_log.append(f"Security review fix failed at iteration {iteration}")
-            return ReviewPhaseResult(success=False, error="Fix session failed")
+            return ReviewPhaseResult(success=False, cost_usd=phase_cost, error="Fix session failed")
 
         # Re-review (resume security session)
         sec_session_id = ctx.review_session_ids.get("security-reviewer")
@@ -493,18 +533,22 @@ def run_security_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
                 model=ctx.settings.claude_review_model,
                 resume_session=sec_session_id,
             )
+            phase_cost += result.cost_usd
             if result.session_id:
                 ctx.review_session_ids["security-reviewer"] = result.session_id
         else:
-            run_single_review_agent(
+            _, _, rr_cost = run_single_review_agent(
                 ctx, "security-reviewer", "security-review", prompt_name="security-reviewer"
             )
+            phase_cost += rr_cost
 
     # Max iterations
     create_fixup_commit(ctx.working_dir, ctx.session_log, "security fixes")
     ctx.session_log.append(f"Security review: max iterations ({max_iter}) reached")
     console.print("[yellow]⚠ Security Review: max iterations reached[/yellow]")
-    return ReviewPhaseResult(success=True, lgtm=False, findings_count=open_count)
+    return ReviewPhaseResult(
+        success=True, lgtm=False, cost_usd=phase_cost, findings_count=open_count
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -536,6 +580,9 @@ def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
 
     max_iter = ctx.settings.codex_review_max_iterations
     model = ctx.settings.codex_review_model
+    # Codex CLI runs as subprocess — no API cost tracking for the review itself.
+    # Only fix sessions (run_claude) contribute to phase_cost.
+    phase_cost = 0.0
 
     for iteration in range(1, max_iter + 1):
         console.print(f"[cyan]Codex review iteration {iteration}/{max_iter}[/cyan]")
@@ -587,7 +634,9 @@ def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
                     f"{format_duration(duration)})[/red]"
                 )
                 ctx.session_log.append(f"Codex review failed at iteration {iteration}")
-                return ReviewPhaseResult(success=False, error=f"Exit code {proc.returncode}")
+                return ReviewPhaseResult(
+                    success=False, error=f"Exit code {proc.returncode}", cost_usd=phase_cost
+                )
 
             console.print(f"[green]Codex review done ({format_duration(duration)})[/green]")
 
@@ -599,27 +648,30 @@ def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
                     create_fixup_commit(ctx.working_dir, ctx.session_log, "codex fixes")
                 ctx.session_log.append(f"Codex LGTM after {iteration} iteration(s)")
                 console.print("[green]✓ Codex Review: LGTM[/green]")
-                return ReviewPhaseResult(success=True, lgtm=True)
+                return ReviewPhaseResult(success=True, lgtm=True, cost_usd=phase_cost)
 
             console.print(f"[yellow]Codex review: {open_count} open finding(s)[/yellow]")
 
             # Fix (not on last iteration)
             if iteration < max_iter:
-                fix_ok = run_fix_session(ctx, ["codex-review"], iteration)
+                fix_ok, fix_cost = run_fix_session(ctx, ["codex-review"], iteration)
+                phase_cost += fix_cost
                 if not fix_ok:
                     ctx.session_log.append(f"Codex fix failed at iteration {iteration}")
-                    return ReviewPhaseResult(success=False, error="Fix session failed")
+                    return ReviewPhaseResult(
+                        success=False, error="Fix session failed", cost_usd=phase_cost
+                    )
 
         except Exception as e:
             console.print(f"[red]Codex review error: {e}[/red]")
             ctx.session_log.append(f"Codex review error: {e}")
-            return ReviewPhaseResult(success=False, error=str(e))
+            return ReviewPhaseResult(success=False, error=str(e), cost_usd=phase_cost)
 
     # Max iterations
     create_fixup_commit(ctx.working_dir, ctx.session_log, "codex fixes")
     ctx.session_log.append(f"Codex review: max iterations ({max_iter}) reached")
     console.print("[yellow]⚠ Codex Review: max iterations reached[/yellow]")
-    return ReviewPhaseResult(success=True, lgtm=False)
+    return ReviewPhaseResult(success=True, lgtm=False, cost_usd=phase_cost)
 
 
 # ---------------------------------------------------------------------------
@@ -661,7 +713,7 @@ def run_finalization_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
 
     console.print(f"[red]✗ Finalization failed: {result.error_type.value}[/red]")
     ctx.session_log.append(f"Finalization failed: {result.error_type.value}")
-    return ReviewPhaseResult(success=False, error=result.error_type.value)
+    return ReviewPhaseResult(success=False, error=result.error_type.value, cost_usd=result.cost_usd)
 
 
 # ---------------------------------------------------------------------------
@@ -678,12 +730,12 @@ def run_review_chain(
     main_session_id: str | None = None,
     notifier: Notifier | None = None,
     base_commit: str | None = None,
-) -> bool:
+) -> ReviewChainResult:
     """Run full review chain after main implementation.
 
     Phases: Code Review → Simplifier → Security → Codex → Finalization
 
-    Returns True if chain completed, False on fatal error.
+    Returns ReviewChainResult with success flag and aggregated cost.
     """
     project, task_number = _parse_task_ref(task_ref)
 
@@ -739,16 +791,17 @@ def run_review_chain(
     session_log.append(f"Review chain completed: {task_ref}")
     console.rule(f"[bold blue]Review Chain Complete: {task_ref}[/bold blue]")
 
-    # Summary
     phases = [
-        ("Code Review", code_review),
-        ("Simplifier", simplifier),
-        ("Security", security),
-        ("Codex", codex),
-        ("Finalization", finalization),
+        ("Code Review", "code_review", code_review),
+        ("Simplifier", "simplifier", simplifier),
+        ("Security", "security", security),
+        ("Codex", "codex", codex),
+        ("Finalization", "finalization", finalization),
     ]
 
-    for name, result in phases:
+    phase_results = {key: result for _, key, result in phases}
+
+    for name, _, result in phases:
         if result.lgtm and result.success:
             status = "[green]✓ LGTM[/green]"
         elif not result.success:
@@ -757,4 +810,10 @@ def run_review_chain(
             status = "[yellow]⚠ Issues remain[/yellow]"
         console.print(f"  {name}: {status}")
 
-    return finalization.success
+    total_cost = sum(r.cost_usd for r in phase_results.values())
+
+    return ReviewChainResult(
+        success=finalization.success,
+        total_cost_usd=total_cost,
+        phase_results=phase_results,
+    )

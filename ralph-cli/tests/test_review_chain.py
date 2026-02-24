@@ -7,8 +7,10 @@ from ralph_cli.commands.review_chain import (
     CODE_REVIEW_AGENTS,
     CODE_REVIEW_SECTION_TYPES,
     ReviewChainContext,
+    ReviewChainResult,
     ReviewPhaseResult,
     _parse_task_ref,
+    _run_agent_with_retry,
     check_lgtm,
     create_fixup_commit,
     run_code_review_phase,
@@ -189,16 +191,18 @@ class TestRunSingleReviewAgent:
     @patch("ralph_cli.commands.review_chain.run_claude")
     def test_success(self, mock_run_claude, ctx):
         mock_run_claude.return_value = _make_result(success=True, session_id="rev-1")
-        success, sid = run_single_review_agent(ctx, "code-reviewer", "code-review")
+        success, sid, cost = run_single_review_agent(ctx, "code-reviewer", "code-review")
         assert success is True
         assert sid == "rev-1"
+        assert cost == 0.05
 
     @patch("ralph_cli.commands.review_chain.run_claude")
     def test_failure(self, mock_run_claude, ctx):
         mock_run_claude.return_value = _make_result(success=False, session_id="rev-2")
-        success, sid = run_single_review_agent(ctx, "code-reviewer", "code-review")
+        success, sid, cost = run_single_review_agent(ctx, "code-reviewer", "code-review")
         assert success is False
         assert sid == "rev-2"
+        assert cost == 0.05
 
     @patch("ralph_cli.commands.review_chain.run_claude")
     def test_missing_prompt(self, mock_run_claude, ctx):
@@ -206,9 +210,10 @@ class TestRunSingleReviewAgent:
             "ralph_cli.commands.review_chain.load_prompt",
             side_effect=FileNotFoundError("not found"),
         ):
-            success, sid = run_single_review_agent(ctx, "nonexistent", "none", "x")
+            success, sid, cost = run_single_review_agent(ctx, "nonexistent", "none", "x")
             assert success is False
             assert sid is None
+            assert cost == 0.0
             mock_run_claude.assert_not_called()
 
     @patch("ralph_cli.commands.review_chain.run_claude")
@@ -236,6 +241,34 @@ class TestRunSingleReviewAgent:
 
 
 # ---------------------------------------------------------------------------
+# _run_agent_with_retry
+# ---------------------------------------------------------------------------
+
+
+class TestRunAgentWithRetry:
+    @patch("ralph_cli.commands.review_chain.run_claude")
+    def test_success_no_retry(self, mock_run_claude, ctx):
+        mock_run_claude.return_value = _make_result(success=True, cost=0.10)
+        success, sid, cost = _run_agent_with_retry(ctx, "code-reviewer", "code-review")
+        assert success is True
+        assert cost == pytest.approx(0.10)
+        assert mock_run_claude.call_count == 1
+
+    @patch("ralph_cli.commands.review_chain.run_claude")
+    def test_retry_sums_costs(self, mock_run_claude, ctx):
+        """First attempt fails (cost=0.10), retry succeeds (cost=0.15) → total=0.25."""
+        mock_run_claude.side_effect = [
+            _make_result(success=False, cost=0.10, session_id="s1"),
+            _make_result(success=True, cost=0.15, session_id="s2"),
+        ]
+        success, sid, cost = _run_agent_with_retry(ctx, "code-reviewer", "code-review")
+        assert success is True
+        assert sid == "s2"
+        assert cost == pytest.approx(0.25)
+        assert mock_run_claude.call_count == 2
+
+
+# ---------------------------------------------------------------------------
 # run_parallel_code_reviews
 # ---------------------------------------------------------------------------
 
@@ -244,9 +277,10 @@ class TestRunParallelCodeReviews:
     @patch("ralph_cli.commands.review_chain.run_claude")
     def test_all_succeed(self, mock_run_claude, ctx):
         mock_run_claude.return_value = _make_result(success=True)
-        results = run_parallel_code_reviews(ctx)
+        results, total_cost = run_parallel_code_reviews(ctx)
         assert len(results) == 4
         assert all(success for success, _ in results.values())
+        assert total_cost > 0
 
     @patch("ralph_cli.commands.review_chain.run_claude")
     def test_stores_session_ids(self, mock_run_claude, ctx):
@@ -254,6 +288,13 @@ class TestRunParallelCodeReviews:
         run_parallel_code_reviews(ctx)
         # All 4 agents should have session IDs stored
         assert len(ctx.review_session_ids) == 4
+
+    @patch("ralph_cli.commands.review_chain.run_claude")
+    def test_aggregates_cost(self, mock_run_claude, ctx):
+        mock_run_claude.return_value = _make_result(success=True, cost=0.10)
+        _, total_cost = run_parallel_code_reviews(ctx)
+        # 4 agents, each costs 0.10 (no retry since all succeed)
+        assert total_cost == pytest.approx(0.40, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -265,59 +306,69 @@ class TestRunCodeReviewPhase:
     @patch("ralph_cli.commands.review_chain.check_lgtm", return_value=(True, 0))
     @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
     def test_lgtm_first_iteration(self, mock_parallel, mock_lgtm, ctx):
-        mock_parallel.return_value = {
-            "code-reviewer": (True, "s1"),
-            "comment-analyzer": (True, "s2"),
-            "pr-test-analyzer": (True, "s3"),
-            "silent-failure-hunter": (True, "s4"),
-        }
+        mock_parallel.return_value = (
+            {
+                "code-reviewer": (True, "s1"),
+                "comment-analyzer": (True, "s2"),
+                "pr-test-analyzer": (True, "s3"),
+                "silent-failure-hunter": (True, "s4"),
+            },
+            0.40,
+        )
         result = run_code_review_phase(ctx)
         assert result.success is True
         assert result.lgtm is True
+        assert result.cost_usd == pytest.approx(0.40)
 
     @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
     def test_all_agents_fail(self, mock_parallel, ctx):
-        mock_parallel.return_value = {
-            "code-reviewer": (False, None),
-            "comment-analyzer": (False, None),
-            "pr-test-analyzer": (False, None),
-            "silent-failure-hunter": (False, None),
-        }
+        mock_parallel.return_value = (
+            {
+                "code-reviewer": (False, None),
+                "comment-analyzer": (False, None),
+                "pr-test-analyzer": (False, None),
+                "silent-failure-hunter": (False, None),
+            },
+            0.20,
+        )
         result = run_code_review_phase(ctx)
         assert result.success is False
         assert "All review agents failed" in result.error
+        assert result.cost_usd == pytest.approx(0.20)
 
     @patch("ralph_cli.commands.review_chain.create_fixup_commit")
-    @patch("ralph_cli.commands.review_chain._resume_reviewers")
-    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=True)
+    @patch("ralph_cli.commands.review_chain._resume_reviewers", return_value=0.10)
+    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=(True, 0.05))
     @patch("ralph_cli.commands.review_chain.check_lgtm")
     @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
     def test_lgtm_after_fix(self, mock_parallel, mock_lgtm, mock_fix, mock_resume, mock_fixup, ctx):
-        mock_parallel.return_value = {"code-reviewer": (True, "s1")}
+        mock_parallel.return_value = ({"code-reviewer": (True, "s1")}, 0.10)
         # First check: not LGTM; after fix: LGTM
         mock_lgtm.side_effect = [(False, 2), (True, 0)]
         result = run_code_review_phase(ctx)
         assert result.success is True
         assert result.lgtm is True
         mock_fix.assert_called_once()
+        # 0.10 (parallel) + 0.05 (fix) + 0.10 (resume)
+        assert result.cost_usd == pytest.approx(0.25)
 
     @patch("ralph_cli.commands.review_chain.create_fixup_commit")
-    @patch("ralph_cli.commands.review_chain._resume_reviewers")
-    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=True)
+    @patch("ralph_cli.commands.review_chain._resume_reviewers", return_value=0.10)
+    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=(True, 0.05))
     @patch("ralph_cli.commands.review_chain.check_lgtm", return_value=(False, 3))
     @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
     def test_max_iterations(self, mock_parallel, mock_lgtm, mock_fix, mock_resume, mock_fixup, ctx):
-        mock_parallel.return_value = {"code-reviewer": (True, "s1")}
+        mock_parallel.return_value = ({"code-reviewer": (True, "s1")}, 0.10)
         result = run_code_review_phase(ctx)
         assert result.success is True
         assert result.lgtm is False
         assert result.findings_count == 3
 
-    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=False)
+    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=(False, 0.05))
     @patch("ralph_cli.commands.review_chain.check_lgtm", return_value=(False, 1))
     @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
     def test_fix_failure_stops(self, mock_parallel, mock_lgtm, mock_fix, ctx):
-        mock_parallel.return_value = {"code-reviewer": (True, "s1")}
+        mock_parallel.return_value = ({"code-reviewer": (True, "s1")}, 0.10)
         result = run_code_review_phase(ctx)
         assert result.success is False
         assert "Fix session failed" in result.error
@@ -363,24 +414,26 @@ class TestRunSecurityReviewPhase:
     @patch("ralph_cli.commands.review_chain.check_lgtm", return_value=(True, 0))
     @patch("ralph_cli.commands.review_chain._run_agent_with_retry")
     def test_lgtm_first_check(self, mock_agent, mock_lgtm, ctx):
-        mock_agent.return_value = (True, "sec-1")
+        mock_agent.return_value = (True, "sec-1", 0.10)
         result = run_security_review_phase(ctx)
         assert result.success is True
         assert result.lgtm is True
+        assert result.cost_usd == pytest.approx(0.10)
 
     @patch("ralph_cli.commands.review_chain._run_agent_with_retry")
     def test_agent_failure(self, mock_agent, ctx):
-        mock_agent.return_value = (False, None)
+        mock_agent.return_value = (False, None, 0.05)
         result = run_security_review_phase(ctx)
         assert result.success is False
+        assert result.cost_usd == pytest.approx(0.05)
 
     @patch("ralph_cli.commands.review_chain.create_fixup_commit")
     @patch("ralph_cli.commands.review_chain.run_claude")
-    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=True)
+    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=(True, 0.05))
     @patch("ralph_cli.commands.review_chain.check_lgtm")
     @patch("ralph_cli.commands.review_chain._run_agent_with_retry")
     def test_lgtm_after_fix(self, mock_agent, mock_lgtm, mock_fix, mock_rereview, mock_fixup, ctx):
-        mock_agent.return_value = (True, "sec-1")
+        mock_agent.return_value = (True, "sec-1", 0.10)
         mock_lgtm.side_effect = [(False, 1), (True, 0)]
         mock_rereview.return_value = _make_result()
         result = run_security_review_phase(ctx)
@@ -442,7 +495,7 @@ class TestRunCodexReviewPhase:
         assert "--uncommitted" not in cmd
 
     @patch("ralph_cli.commands.review_chain.create_fixup_commit")
-    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=True)
+    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=(True, 0.05))
     @patch("ralph_cli.commands.review_chain.check_lgtm")
     @patch("ralph_cli.commands.review_chain.shutil.which", return_value="/usr/bin/codex")
     @patch("ralph_cli.commands.review_chain.subprocess.Popen")
@@ -466,6 +519,7 @@ class TestRunCodexReviewPhase:
         result = run_codex_review_phase(ctx)
         assert result.success is True
         assert result.lgtm is True
+        assert result.cost_usd == pytest.approx(0.05)
         mock_fix.assert_called_once()
 
 
@@ -527,7 +581,7 @@ class TestRunReviewChain:
         session_log,
     ):
         for mock in [mock_code, mock_simp, mock_sec, mock_codex, mock_final]:
-            mock.return_value = ReviewPhaseResult(success=True, lgtm=True)
+            mock.return_value = ReviewPhaseResult(success=True, lgtm=True, cost_usd=0.10)
 
         result = run_review_chain(
             task_ref="proj#1",
@@ -536,7 +590,11 @@ class TestRunReviewChain:
             settings=settings,
             session_log=session_log,
         )
-        assert result is True
+        assert isinstance(result, ReviewChainResult)
+        assert result.success is True
+        assert result.total_cost_usd == pytest.approx(0.50)
+        assert result.phase_results is not None
+        assert len(result.phase_results) == 5
         # All phases called
         mock_code.assert_called_once()
         mock_simp.assert_called_once()
@@ -571,7 +629,7 @@ class TestRunReviewChain:
             settings=settings,
             session_log=session_log,
         )
-        assert result is False
+        assert result.success is False
 
     @patch("ralph_cli.commands.review_chain.run_finalization_phase")
     @patch("ralph_cli.commands.review_chain.run_codex_review_phase")
@@ -664,6 +722,37 @@ class TestRunReviewChain:
             session_log=session_log,
         )
         assert (temp_dir / "reviews").is_dir()
+
+    @patch("ralph_cli.commands.review_chain.run_finalization_phase")
+    @patch("ralph_cli.commands.review_chain.run_codex_review_phase")
+    @patch("ralph_cli.commands.review_chain.run_security_review_phase")
+    @patch("ralph_cli.commands.review_chain.run_simplifier_phase")
+    @patch("ralph_cli.commands.review_chain.run_code_review_phase")
+    def test_aggregates_cost_from_all_phases(
+        self,
+        mock_code,
+        mock_simp,
+        mock_sec,
+        mock_codex,
+        mock_final,
+        temp_dir,
+        settings,
+        session_log,
+    ):
+        mock_code.return_value = ReviewPhaseResult(success=True, lgtm=True, cost_usd=1.00)
+        mock_simp.return_value = ReviewPhaseResult(success=True, cost_usd=0.50)
+        mock_sec.return_value = ReviewPhaseResult(success=True, lgtm=True, cost_usd=0.30)
+        mock_codex.return_value = ReviewPhaseResult(success=True, lgtm=True, cost_usd=0.20)
+        mock_final.return_value = ReviewPhaseResult(success=True, cost_usd=0.10)
+
+        result = run_review_chain(
+            task_ref="proj#1",
+            working_dir=temp_dir,
+            log_dir=temp_dir,
+            settings=settings,
+            session_log=session_log,
+        )
+        assert result.total_cost_usd == pytest.approx(2.10)
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ from ..config import Settings, get_settings
 from ..executor import expand_task_ranges
 from ..git import cleanup_working_dir, get_current_branch, get_files_to_clean
 from ..logging import SessionLog, format_duration
+from ..metrics import submit_session_metrics
 from ..prompts import load_prompt
 
 console = Console()
@@ -78,7 +79,9 @@ def run_codex_plan_review(
         formatted = format_duration(duration)
 
         if result.returncode != 0:
-            console.print(f"[red]✗ Codex plan review failed (exit {result.returncode}, {formatted})[/red]")
+            console.print(
+                f"[red]✗ Codex plan review failed (exit {result.returncode}, {formatted})[/red]"
+            )
             session_log.append(f"Codex plan review failed: exit {result.returncode} ({formatted})")
             return False
 
@@ -131,7 +134,9 @@ def run_plan(
     current_branch = get_current_branch(working_dir)
     if current_branch in ("master", "main"):
         console.print(f"\n[bold red]Warning: You are on '{current_branch}' branch![/bold red]")
-        if not FlexibleConfirm.ask("[yellow]Are you sure you want to continue?[/yellow]", default=False):
+        if not FlexibleConfirm.ask(
+            "[yellow]Are you sure you want to continue?[/yellow]", default=False
+        ):
             console.print("[yellow]Pipeline stopped.[/yellow]")
             session_log.append(f"Pipeline stopped: user declined to continue on {current_branch}")
             return 1
@@ -202,9 +207,7 @@ def run_plan(
                 completed.append(task_num)
 
                 # Run Codex plan review (interactive)
-                if FlexibleConfirm.ask(
-                    "[cyan]Run Codex plan review?[/cyan]", default=False
-                ):
+                if FlexibleConfirm.ask("[cyan]Run Codex plan review?[/cyan]", default=False):
                     run_codex_plan_review(
                         task_ref=task_ref,
                         project=project,
@@ -242,5 +245,14 @@ def run_plan(
     console.print(f"Duration: [green]{duration}[/green]")
     console.print(f"Completed: [green]{len(completed)}[/green]")
     console.print(f"Failed: [red]{len(failed)}[/red]")
+
+    # Submit metrics (minimal — no cost/tokens in TUI mode)
+    submit_session_metrics(
+        command_type="plan",
+        project=project,
+        started_at=start_time,
+        finished_at=datetime.now(),
+        exit_code=0 if not failed else 1,
+    )
 
     return 0 if not failed else 1

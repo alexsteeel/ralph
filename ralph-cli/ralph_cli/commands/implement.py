@@ -11,6 +11,7 @@ from ..errors import ErrorType
 from ..executor import TaskResult, build_prompt, expand_task_ranges, run_claude
 from ..git import cleanup_working_dir, get_head_commit
 from ..logging import SessionLog, format_duration
+from ..metrics import submit_session_metrics
 from ..notify import Notifier
 from ..recovery import recovery_loop, should_recover, should_retry_fresh
 
@@ -143,7 +144,7 @@ def run_implement(
             # Review chain (after main Claude session completes)
             from .review_chain import run_review_chain
 
-            chain_ok = run_review_chain(
+            chain_result = run_review_chain(
                 task_ref=task_ref,
                 working_dir=working_dir,
                 log_dir=settings.log_dir,
@@ -153,7 +154,10 @@ def run_implement(
                 notifier=notifier,
                 base_commit=base_commit,
             )
-            if chain_ok:
+            task_costs[task_num] += chain_result.total_cost_usd
+            total_cost += chain_result.total_cost_usd
+
+            if chain_result.success:
                 console.print("[green]✓ Review Chain: completed[/green]")
             else:
                 console.print("[yellow]⚠ Review Chain: finalization failed[/yellow]")
@@ -165,7 +169,7 @@ def run_implement(
             notifier.task_complete(
                 task_ref=task_ref,
                 duration=task_durations[task_num],
-                cost_usd=result.cost_usd,
+                cost_usd=task_costs[task_num],
                 input_tokens=result.input_tokens,
                 output_tokens=result.output_tokens,
                 status=task_status,
@@ -218,6 +222,17 @@ def run_implement(
         total_cost_usd=total_cost,
         task_costs=task_costs,
         project_stats=project_stats,
+    )
+
+    # Submit metrics (token counts and task_executions not yet available —
+    # requires per-task accumulation from StreamMonitor, planned for #86)
+    submit_session_metrics(
+        command_type="implement",
+        project=project,
+        started_at=start_time,
+        finished_at=datetime.now(),
+        total_cost_usd=total_cost,
+        exit_code=0 if not failed else 1,
     )
 
     # Run batch check if any tasks completed

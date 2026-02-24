@@ -18,6 +18,8 @@ class TestSettings:
         assert settings.recovery_enabled is True
         assert settings.recovery_delays == [3600, 7200, 10800]
         assert settings.context_overflow_max_retries == 2
+        assert settings.ralph_tasks_api_url is None
+        assert settings.ralph_tasks_api_key is None
 
     def test_telegram_configured_false(self):
         """Test telegram_configured when not configured."""
