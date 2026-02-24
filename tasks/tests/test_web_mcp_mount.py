@@ -176,6 +176,33 @@ class TestKanbanRedirect:
         assert response.status_code == 301
         assert response.headers["location"] == "/kanban/my-project?filter=todo"
 
+    def test_kanban_renders_review_badges(self, client):
+        """Kanban cards show review badge when review_counts has data."""
+        from ralph_tasks.core import Task
+
+        task = Task(number=1, title="Test task", status="todo", updated_at="2026-01-01T00:00:00")
+        with (
+            patch("ralph_tasks.web.list_tasks", return_value=[task]),
+            patch("ralph_tasks.web.count_open_findings", return_value={1: 3}),
+        ):
+            response = client.get("/kanban/test-proj")
+        assert response.status_code == 200
+        assert 'data-testid="review-badge-1"' in response.text
+        assert "3 open" in response.text
+
+    def test_kanban_graceful_degradation(self, client):
+        """Kanban renders without badges when count_open_findings raises."""
+        from ralph_tasks.core import Task
+
+        task = Task(number=1, title="Test task", status="todo", updated_at="2026-01-01T00:00:00")
+        with (
+            patch("ralph_tasks.web.list_tasks", return_value=[task]),
+            patch("ralph_tasks.web.count_open_findings", side_effect=ConnectionError("Neo4j down")),
+        ):
+            response = client.get("/kanban/test-proj")
+        assert response.status_code == 200
+        assert 'data-testid="review-badge-' not in response.text
+
 
 class TestWebMainConfig:
     """Tests for web.main() configuration via environment variables."""

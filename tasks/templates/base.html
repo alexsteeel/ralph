@@ -1122,6 +1122,252 @@
             font-size: 0.75rem;
             font-style: italic;
         }
+
+        /* Review system */
+        :root {
+            --review-open: #f0ad4e;
+            --review-resolved: #5cb85c;
+            --review-declined: #888;
+        }
+
+        .review-badge {
+            display: inline-block;
+            font-size: 0.5rem;
+            padding: 0.1rem 0.25rem;
+            border-radius: 2px;
+            background: var(--review-open);
+            color: #000;
+            font-weight: 600;
+        }
+
+        .review-tab-content {
+            display: none;
+            flex-direction: column;
+            gap: 0.75rem;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .review-tab-content.active {
+            display: flex;
+        }
+
+        .review-sub-tabs {
+            display: flex;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .review-sub-tab {
+            font-size: 0.75rem;
+            padding: 0.3rem 0.6rem;
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            background: none;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .review-sub-tab:hover {
+            color: var(--text);
+            background: var(--accent);
+        }
+
+        .review-sub-tab.active {
+            color: var(--text);
+            background: var(--accent);
+            border-color: var(--text-muted);
+        }
+
+        .status-filter {
+            display: flex;
+            gap: 0.3rem;
+        }
+
+        .status-filter-btn {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            border: 1px solid var(--accent);
+            border-radius: 3px;
+            background: none;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .status-filter-btn:hover {
+            color: var(--text);
+        }
+
+        .status-filter-btn.active {
+            color: var(--text);
+            background: var(--accent);
+        }
+
+        .finding-card {
+            background: var(--bg);
+            border-radius: 6px;
+            border-left: 3px solid var(--review-open);
+            padding: 0.75rem;
+        }
+
+        .finding-card.status-resolved {
+            border-left-color: var(--review-resolved);
+        }
+
+        .finding-card.status-declined {
+            border-left-color: var(--review-declined);
+        }
+
+        .finding-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.5rem;
+            font-size: 0.75rem;
+        }
+
+        .finding-status {
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .finding-status.open {
+            background: var(--review-open);
+            color: #000;
+        }
+
+        .finding-status.resolved {
+            background: var(--review-resolved);
+            color: #fff;
+        }
+
+        .finding-status.declined {
+            background: var(--review-declined);
+            color: #fff;
+        }
+
+        .finding-author {
+            color: var(--text-muted);
+        }
+
+        .finding-file {
+            color: var(--approved);
+            font-family: monospace;
+            font-size: 0.7rem;
+        }
+
+        .finding-date {
+            color: var(--text-muted);
+            font-size: 0.65rem;
+            margin-left: auto;
+        }
+
+        .finding-body {
+            font-size: 0.85rem;
+            line-height: 1.5;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .finding-body h1, .finding-body h2, .finding-body h3 {
+            margin: 0.5rem 0 0.3rem;
+            font-weight: 600;
+        }
+
+        .finding-body h1 { font-size: 1.1rem; }
+        .finding-body h2 { font-size: 1rem; }
+        .finding-body h3 { font-size: 0.9rem; }
+
+        .finding-body p { margin: 0.3rem 0; }
+
+        .finding-body code {
+            background: var(--card-bg);
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+
+        .finding-body pre {
+            background: var(--card-bg);
+            padding: 0.75rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 0.3rem 0;
+        }
+
+        .finding-body pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .finding-resolved-info, .finding-declined-info {
+            margin-top: 0.5rem;
+            padding: 0.4rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .finding-resolved-info {
+            background: rgba(92, 184, 92, 0.15);
+            border-left: 2px solid var(--review-resolved);
+        }
+
+        .finding-declined-info {
+            background: rgba(136, 136, 136, 0.15);
+            border-left: 2px solid var(--review-declined);
+        }
+
+        .finding-comments {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--accent);
+        }
+
+        .comment-item {
+            padding: 0.3rem 0 0.3rem 0.75rem;
+            border-left: 2px solid var(--accent);
+            margin-top: 0.3rem;
+            font-size: 0.8rem;
+        }
+
+        .comment-header {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .comment-author {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .comment-body {
+            line-height: 1.4;
+        }
+
+        .comment-reply {
+            margin-left: 0.75rem;
+        }
+
+        .review-empty {
+            color: var(--text-muted);
+            font-style: italic;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .review-error {
+            color: var(--hold);
+            padding: 1rem;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -1160,9 +1406,15 @@
                 <button class="modal-tab" data-tab="plan">Plan</button>
                 <button class="modal-tab" data-tab="report">Report</button>
                 <button class="modal-tab" data-tab="blocks">Blocks</button>
+                <button class="modal-tab" data-tab="review" data-testid="review-tab">Review</button>
             </div>
             <div class="modal-body" id="modal-body"></div>
             <textarea class="modal-editor" id="modal-editor"></textarea>
+            <div class="review-tab-content" id="review-tab-content" data-testid="review-tab-content">
+                <div class="review-sub-tabs" id="review-sub-tabs" data-testid="review-sub-tabs"></div>
+                <div class="status-filter" id="review-status-filter" data-testid="review-status-filter"></div>
+                <div id="review-findings-list" data-testid="review-findings-list"></div>
+            </div>
 
             <!-- Attachments section (shown only in body tab) -->
             <div class="attachments-section" id="attachments-section">
@@ -1202,6 +1454,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
     <script>
         const _apiKey = {{ api_key|default("", true)|tojson }};
         function authHeaders(extra) {
@@ -1323,10 +1576,11 @@
 
             currentData = { description: description || '', plan: plan || '', report: report || '', blocks: blocks || '' };
             currentTask = { project, number, title: taskTitle, started: started || '', completed: completed || '', status: status || 'todo', module: module || '' };
+            currentReviewData = null; // Reset review cache on task change
             currentTab = initialTab;
             isEditing = false;
-            showTab(initialTab);
             setEditMode(false);
+            showTab(initialTab);
             updateStatusButtons(currentTask.status);
             modal.classList.add('active');
         }
@@ -1334,14 +1588,30 @@
         function showTab(tab) {
             currentTab = tab;
             tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+
+            // Handle review tab specially
+            if (tab === 'review') {
+                showReviewTab();
+                return;
+            }
+
+            // Hide review content when switching away
+            if (reviewTabContent) reviewTabContent.classList.remove('active');
+
             if (isEditing) {
                 modalEditor.value = currentData[tab];
+                modalEditor.classList.add('active');
             } else {
                 const labels = { description: 'description', plan: 'plan', report: 'report', blocks: 'blocks' };
                 const content = currentData[tab] || `_No ${labels[tab]}_`;
                 // XSS risk accepted: internal-only tool, task content written only by authenticated API users
                 modalBody.innerHTML = marked.parse(content);
             }
+
+            // Restore modal body and edit/delete buttons visibility
+            btnEdit.style.display = isEditing ? 'none' : 'block';
+            btnDelete.style.display = isEditing ? 'none' : 'block';
+            modalBody.classList.toggle('hidden', isEditing);
 
             // Show attachments section only in description tab
             const attachmentsSection = document.getElementById('attachments-section');
@@ -1921,6 +2191,309 @@
                 console.error('Delete failed:', e);
                 alert('Failed to delete attachment');
             }
+        }
+
+        // =============================================================================
+        // Review functions
+        // Review content (findings, comments) is sanitized via DOMPurify before
+        // innerHTML assignment to prevent stored XSS from agent-supplied content.
+        // =============================================================================
+
+        let currentReviewData = null;
+        let currentReviewType = null;
+        let currentStatusFilter = 'all';
+
+        const reviewTabContent = document.getElementById('review-tab-content');
+        const reviewSubTabs = document.getElementById('review-sub-tabs');
+        const reviewStatusFilter = document.getElementById('review-status-filter');
+        const reviewFindingsList = document.getElementById('review-findings-list');
+
+        function showReviewTab() {
+            modalBody.classList.add('hidden');
+            modalEditor.classList.remove('active');
+            reviewTabContent.classList.add('active');
+            // Hide edit/delete buttons for review tab (read-only)
+            btnEdit.style.display = 'none';
+            btnDelete.style.display = 'none';
+            // Hide attachments
+            document.getElementById('attachments-section').classList.remove('visible');
+
+            if (!currentReviewData || currentReviewData._taskNumber !== currentTask.number) {
+                loadReviewData();
+            } else {
+                renderReviewSubTabs();
+            }
+        }
+
+        function showReviewError(msg) {
+            reviewFindingsList.textContent = '';
+            const errEl = document.createElement('div');
+            errEl.className = 'review-error';
+            errEl.textContent = msg;
+            reviewFindingsList.appendChild(errEl);
+        }
+
+        async function loadReviewData() {
+            reviewFindingsList.textContent = '';
+            const loadingEl = document.createElement('div');
+            loadingEl.className = 'review-empty';
+            loadingEl.textContent = 'Loading...';
+            reviewFindingsList.appendChild(loadingEl);
+            reviewSubTabs.textContent = '';
+            reviewStatusFilter.textContent = '';
+
+            try {
+                const res = await fetch(`/api/task/${currentTask.project}/${currentTask.number}/reviews`, {
+                    headers: authHeaders()
+                });
+                if (res.ok) {
+                    currentReviewData = await res.json();
+                    currentReviewData._taskNumber = currentTask.number;
+                    currentReviewType = currentReviewData.review_types.length > 0 ? currentReviewData.review_types[0] : null;
+                    currentStatusFilter = 'all';
+                    renderReviewSubTabs();
+                } else {
+                    console.error('Failed to load reviews: HTTP', res.status);
+                    showReviewError('Failed to load review data (HTTP ' + res.status + ')');
+                }
+            } catch (e) {
+                console.error('Failed to load reviews:', e);
+                showReviewError('Failed to load review data');
+            }
+        }
+
+        function renderReviewSubTabs() {
+            reviewSubTabs.textContent = '';
+
+            if (!currentReviewData || currentReviewData.review_types.length === 0) {
+                reviewStatusFilter.textContent = '';
+                reviewFindingsList.textContent = '';
+                const emptyEl = document.createElement('div');
+                emptyEl.className = 'review-empty';
+                emptyEl.setAttribute('data-testid', 'review-empty');
+                emptyEl.textContent = 'No review findings';
+                reviewFindingsList.appendChild(emptyEl);
+                return;
+            }
+
+            currentReviewData.review_types.forEach(rt => {
+                const btn = document.createElement('button');
+                btn.className = 'review-sub-tab' + (rt === currentReviewType ? ' active' : '');
+                btn.setAttribute('data-testid', 'review-sub-tab-' + rt);
+                const s = currentReviewData.summary[rt] || { open: 0, resolved: 0, declined: 0 };
+                const total = s.open + s.resolved + s.declined;
+                btn.textContent = rt + ' (' + s.open + '/' + total + ')';
+                btn.onclick = () => selectReviewType(rt);
+                reviewSubTabs.appendChild(btn);
+            });
+
+            renderStatusFilter();
+            renderFindings();
+        }
+
+        function selectReviewType(rt) {
+            currentReviewType = rt;
+            currentStatusFilter = 'all';
+            document.querySelectorAll('.review-sub-tab').forEach(t => {
+                t.classList.toggle('active', t.getAttribute('data-testid') === 'review-sub-tab-' + rt);
+            });
+            renderStatusFilter();
+            renderFindings();
+        }
+
+        function renderStatusFilter() {
+            reviewStatusFilter.textContent = '';
+            if (!currentReviewType || !currentReviewData) return;
+
+            const s = currentReviewData.summary[currentReviewType] || { open: 0, resolved: 0, declined: 0 };
+            const total = s.open + s.resolved + s.declined;
+
+            const filters = [
+                { key: 'all', label: 'All (' + total + ')' },
+                { key: 'open', label: 'Open (' + s.open + ')' },
+                { key: 'resolved', label: 'Resolved (' + s.resolved + ')' },
+                { key: 'declined', label: 'Declined (' + s.declined + ')' }
+            ];
+
+            filters.forEach(f => {
+                const btn = document.createElement('button');
+                btn.className = 'status-filter-btn' + (f.key === currentStatusFilter ? ' active' : '');
+                btn.setAttribute('data-testid', 'status-filter-' + f.key);
+                btn.textContent = f.label;
+                btn.onclick = () => {
+                    currentStatusFilter = f.key;
+                    document.querySelectorAll('.status-filter-btn').forEach(b => {
+                        b.classList.remove('active');
+                    });
+                    btn.classList.add('active');
+                    renderFindings();
+                };
+                reviewStatusFilter.appendChild(btn);
+            });
+        }
+
+        function renderFindings() {
+            reviewFindingsList.textContent = '';
+            if (!currentReviewType || !currentReviewData) return;
+
+            let findings = currentReviewData.findings[currentReviewType] || [];
+            if (currentStatusFilter !== 'all') {
+                findings = findings.filter(f => f.status === currentStatusFilter);
+            }
+
+            if (findings.length === 0) {
+                const emptyEl = document.createElement('div');
+                emptyEl.className = 'review-empty';
+                emptyEl.textContent = 'No findings match filter';
+                reviewFindingsList.appendChild(emptyEl);
+                return;
+            }
+
+            findings.forEach(f => {
+                reviewFindingsList.appendChild(renderFindingCard(f));
+            });
+        }
+
+        function renderFindingCard(f) {
+            const card = document.createElement('div');
+            card.className = 'finding-card status-' + (f.status || 'open');
+            card.setAttribute('data-testid', 'finding-card');
+
+            // Header
+            const header = document.createElement('div');
+            header.className = 'finding-header';
+
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'finding-status ' + (f.status || 'open');
+            statusBadge.textContent = f.status || 'open';
+            header.appendChild(statusBadge);
+
+            const author = document.createElement('span');
+            author.className = 'finding-author';
+            author.textContent = f.author || '';
+            header.appendChild(author);
+
+            if (f.file) {
+                const fileEl = document.createElement('span');
+                fileEl.className = 'finding-file';
+                let fileText = f.file;
+                if (f.line_start) {
+                    fileText += ':' + f.line_start;
+                    if (f.line_end && f.line_end !== f.line_start) {
+                        fileText += '-' + f.line_end;
+                    }
+                }
+                fileEl.textContent = fileText;
+                header.appendChild(fileEl);
+            }
+
+            if (f.created_at) {
+                const dateEl = document.createElement('span');
+                dateEl.className = 'finding-date';
+                dateEl.textContent = f.created_at.substring(0, 16).replace('T', ' ');
+                header.appendChild(dateEl);
+            }
+
+            card.appendChild(header);
+
+            // Body (markdown) — sanitized via DOMPurify
+            const body = document.createElement('div');
+            body.className = 'finding-body';
+            body.innerHTML = DOMPurify.sanitize(marked.parse(f.text || ''));
+            card.appendChild(body);
+
+            // Resolved info
+            if (f.status === 'resolved' && (f.response || f.resolved_at)) {
+                const info = document.createElement('div');
+                info.className = 'finding-resolved-info';
+                let infoText = 'Resolved';
+                if (f.resolved_at) infoText += ' at ' + f.resolved_at.substring(0, 16).replace('T', ' ');
+                if (f.response) infoText += ': ' + f.response;
+                info.textContent = infoText;
+                card.appendChild(info);
+            }
+
+            // Declined info
+            if (f.status === 'declined' && (f.decline_reason || f.declined_at)) {
+                const info = document.createElement('div');
+                info.className = 'finding-declined-info';
+                let infoText = 'Declined';
+                if (f.declined_at) infoText += ' at ' + f.declined_at.substring(0, 16).replace('T', ' ');
+                if (f.decline_reason) infoText += ': ' + f.decline_reason;
+                info.textContent = infoText;
+                card.appendChild(info);
+            }
+
+            // Comments
+            const comments = f.comments || [];
+            if (comments.length > 0) {
+                const commentsSection = document.createElement('div');
+                commentsSection.className = 'finding-comments';
+                comments.forEach(c => {
+                    commentsSection.appendChild(renderComment(c));
+                });
+                card.appendChild(commentsSection);
+            }
+
+            return card;
+        }
+
+        function renderComment(c) {
+            const item = document.createElement('div');
+            item.className = 'comment-item';
+
+            const commentHeader = document.createElement('div');
+            commentHeader.className = 'comment-header';
+
+            const commentAuthor = document.createElement('span');
+            commentAuthor.className = 'comment-author';
+            commentAuthor.textContent = c.author || '';
+            commentHeader.appendChild(commentAuthor);
+
+            if (c.created_at) {
+                const commentDate = document.createElement('span');
+                commentDate.textContent = c.created_at.substring(0, 16).replace('T', ' ');
+                commentHeader.appendChild(commentDate);
+            }
+            item.appendChild(commentHeader);
+
+            // Comment body (markdown) — sanitized via DOMPurify
+            const commentBody = document.createElement('div');
+            commentBody.className = 'comment-body';
+            commentBody.innerHTML = DOMPurify.sanitize(marked.parse(c.text || ''));
+            item.appendChild(commentBody);
+
+            // Replies
+            const replies = c.replies || [];
+            replies.forEach(r => {
+                const reply = document.createElement('div');
+                reply.className = 'comment-item comment-reply';
+
+                const replyHeader = document.createElement('div');
+                replyHeader.className = 'comment-header';
+
+                const replyAuthor = document.createElement('span');
+                replyAuthor.className = 'comment-author';
+                replyAuthor.textContent = r.author || '';
+                replyHeader.appendChild(replyAuthor);
+
+                if (r.created_at) {
+                    const replyDate = document.createElement('span');
+                    replyDate.textContent = r.created_at.substring(0, 16).replace('T', ' ');
+                    replyHeader.appendChild(replyDate);
+                }
+                reply.appendChild(replyHeader);
+
+                // Reply body (markdown) — sanitized via DOMPurify
+                const replyBody = document.createElement('div');
+                replyBody.className = 'comment-body';
+                replyBody.innerHTML = DOMPurify.sanitize(marked.parse(r.text || ''));
+                reply.appendChild(replyBody);
+
+                item.appendChild(reply);
+            });
+
+            return item;
         }
     </script>
 </body>

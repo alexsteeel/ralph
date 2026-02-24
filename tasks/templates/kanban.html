@@ -29,6 +29,7 @@
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
+                    {% set rc = review_counts.get(t.number, 0) %}{% if rc > 0 %}<span class="review-badge" data-testid="review-badge-{{ t.number }}">{{ rc }} open</span>{% endif %}
                 </div>
                 {% if t.started or t.completed %}
                 <div class="kanban-card-dates">
@@ -66,6 +67,7 @@
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
+                    {% set rc = review_counts.get(t.number, 0) %}{% if rc > 0 %}<span class="review-badge" data-testid="review-badge-{{ t.number }}">{{ rc }} open</span>{% endif %}
                 </div>
                 {% if t.started or t.completed %}
                 <div class="kanban-card-dates">
@@ -103,6 +105,7 @@
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
+                    {% set rc = review_counts.get(t.number, 0) %}{% if rc > 0 %}<span class="review-badge" data-testid="review-badge-{{ t.number }}">{{ rc }} open</span>{% endif %}
                 </div>
                 {% if t.started or t.completed %}
                 <div class="kanban-card-dates">
@@ -140,6 +143,7 @@
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
+                    {% set rc = review_counts.get(t.number, 0) %}{% if rc > 0 %}<span class="review-badge" data-testid="review-badge-{{ t.number }}">{{ rc }} open</span>{% endif %}
                 </div>
                 {% if t.started or t.completed %}
                 <div class="kanban-card-dates">
@@ -177,6 +181,7 @@
                     <span class="section-icon {{ 'has-content' if t.plan else '' }}" title="Plan">P</span>
                     <span class="section-icon {{ 'has-content' if t.report else '' }}" title="Report">RP</span>
                     <span class="section-icon {{ 'has-content' if t.blocks else '' }}" title="Blocks">B</span>
+                    {% set rc = review_counts.get(t.number, 0) %}{% if rc > 0 %}<span class="review-badge" data-testid="review-badge-{{ t.number }}">{{ rc }} open</span>{% endif %}
                 </div>
                 {% if t.started or t.completed %}
                 <div class="kanban-card-dates">

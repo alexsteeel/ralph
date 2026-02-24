@@ -434,6 +434,46 @@ class TestFindingCRUD:
         assert len(findings[0]["comments"]) == 1
         assert findings[0]["comments"][0]["text"] == "Fixing now"
 
+    def test_count_open_findings_by_task(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task 1")
+        crud.create_task(neo4j_session, "proj", "Task 2")
+
+        # Task 1: 2 open, 1 resolved
+        crud.create_finding(neo4j_session, "proj", 1, "code-review", "Issue 1", "rev")
+        crud.create_finding(neo4j_session, "proj", 1, "code-review", "Issue 2", "rev")
+        f3 = crud.create_finding(neo4j_session, "proj", 1, "security", "Sec issue", "rev")
+        crud.update_finding_status(neo4j_session, f3["element_id"], "resolved")
+
+        # Task 2: no findings
+        counts = crud.count_open_findings_by_task(neo4j_session, "proj")
+        assert counts == {1: 2}  # Only task 1, with 2 open findings
+        assert 2 not in counts
+
+    def test_count_open_findings_empty_project(self, neo4j_session):
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task 1")
+        counts = crud.count_open_findings_by_task(neo4j_session, "proj")
+        assert counts == {}
+
+    def test_count_open_findings_multiple_tasks(self, neo4j_session):
+        """Counts from different tasks are not mixed."""
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj")
+        crud.create_task(neo4j_session, "proj", "Task 1")
+        crud.create_task(neo4j_session, "proj", "Task 2")
+
+        # Task 1: 1 open
+        crud.create_finding(neo4j_session, "proj", 1, "code-review", "Issue A", "rev")
+        # Task 2: 2 open
+        crud.create_finding(neo4j_session, "proj", 2, "code-review", "Issue B", "rev")
+        crud.create_finding(neo4j_session, "proj", 2, "security", "Issue C", "rev")
+
+        counts = crud.count_open_findings_by_task(neo4j_session, "proj")
+        assert counts == {1: 1, 2: 2}
+
     def test_repeated_review_adds_findings(self, neo4j_session):
         """New findings are added without removing old ones."""
         crud.create_workspace(neo4j_session, "ws")

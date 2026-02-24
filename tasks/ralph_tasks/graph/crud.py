@@ -828,6 +828,22 @@ def list_findings_with_comments(
     return findings
 
 
+def count_open_findings_by_task(session: Session, project_name: str) -> dict[int, int]:
+    """Return {task_number: open_finding_count} for all tasks in project.
+
+    Single Cypher query. Only returns tasks that have at least 1 open finding.
+    """
+    result = session.run(
+        """
+        MATCH (p:Project {name: $project})-[:HAS_TASK]->(t:Task)
+              -[:HAS_SECTION]->(s:Section)-[:HAS_FINDING]->(f:Finding {status: 'open'})
+        RETURN t.number AS task_number, count(f) AS open_count
+        """,
+        project=project_name,
+    )
+    return {r["task_number"]: r["open_count"] for r in result}
+
+
 # ---------------------------------------------------------------------------
 # Comment
 # ---------------------------------------------------------------------------

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+- **tasks: UI — review sub-tabs in kanban board** (#14)
+  - Kanban card badge showing open review findings count (`N open`)
+  - Modal Review tab with dynamic sub-tabs per review_type (code-review, security, etc.)
+  - Finding cards with status badge, author, file:lines, markdown text, threaded comments
+  - Status filter (All/Open/Resolved/Declined) with client-side filtering
+  - REST API: `GET /api/task/{project}/{number}/reviews` (grouped findings + summary)
+  - REST API: `GET /api/project/{name}/review-counts` (bulk open counts)
+  - New CRUD: `count_open_findings_by_task()` — single Cypher query for project-wide counts
+  - New core: `count_open_findings()` — public API for review counts
+  - Graceful degradation: kanban badges hidden when Neo4j unavailable
+  - API tests (`test_web_review_api.py`), CRUD tests in `test_graph_crud.py`
+
 ### Changed
 - **tasks: MCP role endpoints — swe + reviewer + planner with distinct tool sets** (#13)
   - Split monolithic `/mcp` endpoint into 3 role-based HTTP endpoints:

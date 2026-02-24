@@ -542,6 +542,17 @@ def list_review_findings(
         )
 
 
+def count_open_findings(project: str) -> dict[int, int]:
+    """Return {task_number: open_finding_count} for project.
+
+    Only tasks with at least one open finding are included.
+    Tasks with zero open findings are absent from the result.
+    """
+    project = normalize_project_name(project)
+    with _session() as session:
+        return crud.count_open_findings_by_task(session, project)
+
+
 def reply_to_finding(finding_id: str, text: str, author: str) -> dict:
     """Add a comment to a finding."""
     with _session() as session:

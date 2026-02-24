@@ -20,6 +20,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from . import __version__, storage
 from .core import (
     Task,
+    count_open_findings,
     delete_attachment,
     delete_task,
     get_attachment_bytes,
@@ -27,6 +28,7 @@ from .core import (
     get_task,
     list_attachments,
     list_projects,
+    list_review_findings,
     list_tasks,
     normalize_project_name,
     save_attachment,
@@ -353,12 +355,19 @@ async def kanban_board(request: Request, name: str):
         )
         for status in ("hold", "todo", "work", "done", "approved")
     }
+    # Graceful degradation: if Neo4j review query fails, show no badges
+    try:
+        review_counts = count_open_findings(name)
+    except Exception:
+        logger.warning("Failed to load review counts for kanban %r", name, exc_info=True)
+        review_counts = {}
     return templates.TemplateResponse(
         "kanban.html",
         {
             "request": request,
             "project": name,
             "board": board,
+            "review_counts": review_counts,
             "api_key": _get_configured_api_key(),
         },
     )
@@ -427,6 +436,52 @@ async def create_task_endpoint(project: str, data: TaskCreate):
         project, data.title.strip(), description=data.description or "", plan=data.plan or ""
     )
     return {"ok": True, "number": task.number, "task": task.to_dict()}
+
+
+# =============================================================================
+# Review API
+# =============================================================================
+
+
+@app.get("/api/task/{project}/{number}/reviews")
+async def get_task_reviews(project: str, number: int):
+    """Get review findings grouped by review_type with summary counts."""
+    task = get_task(project, number)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    findings = list_review_findings(project, number)
+
+    # Group by section_type (review_type)
+    grouped: dict[str, list[dict]] = {}
+    for f in findings:
+        rt = f.get("section_type", "unknown")
+        grouped.setdefault(rt, []).append(f)
+
+    review_types = sorted(grouped.keys())
+
+    # Build summary counts per review_type
+    summary: dict[str, dict[str, int]] = {}
+    for rt, flist in grouped.items():
+        summary[rt] = {"open": 0, "resolved": 0, "declined": 0}
+        for f in flist:
+            st = f.get("status", "open")
+            if st in summary[rt]:
+                summary[rt][st] += 1
+
+    return {
+        "review_types": review_types,
+        "findings": grouped,
+        "summary": summary,
+    }
+
+
+@app.get("/api/project/{name}/review-counts")
+async def get_project_review_counts(name: str):
+    """Get open finding counts per task for a project."""
+    counts = count_open_findings(name)
+    # Convert int keys to string for JSON
+    return {"counts": {str(k): v for k, v in counts.items()}}
 
 
 # =============================================================================
