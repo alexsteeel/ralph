@@ -58,6 +58,11 @@
   - New core: `count_open_findings()` — public API for review counts
   - Graceful degradation: kanban badges hidden when Neo4j unavailable
   - API tests (`test_web_review_api.py`), CRUD tests in `test_graph_crud.py`
+- **docs: CLAUDE.md updated with PostgreSQL metrics documentation** (#86)
+  - PostgreSQL metrics storage section (lazy-singleton ThreadedConnectionPool, tables, API, fire-and-forget CLI)
+  - Dashboard URLs in ralph-tasks container section
+  - Updated PostgreSQL tests section (removed "not yet implemented" note, added pg_database fixture docs)
+  - ralph-cli config section for metrics submission (RALPH_TASKS_API_URL, RALPH_TASKS_API_KEY)
 
 ### Changed
 - **tasks: MCP role endpoints — swe + reviewer + planner with distinct tool sets** (#13)

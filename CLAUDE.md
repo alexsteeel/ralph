@@ -131,8 +131,10 @@ The ralph-tasks MCP server runs as a shared Docker container (`ai-sbx-ralph-task
 - `http://ai-sbx-ralph-tasks:8000/mcp-swe` — SWE role MCP endpoint (streamable-http)
 - `http://ai-sbx-ralph-tasks:8000/mcp-review?review_type=<type>` — Reviewer role MCP endpoint
 - `http://ai-sbx-ralph-tasks:8000/mcp-plan` — Planner role MCP endpoint
+- `http://ai-sbx-ralph-tasks:8000/dashboard` — Metrics dashboard
 - `http://ai-sbx-ralph-tasks:8000/health` — Docker HEALTHCHECK
 - `http://localhost:58000/` — Kanban web UI (from host, via port mapping)
+- `http://localhost:58000/dashboard` — Metrics dashboard (from host, via port mapping)
 
 Build: `docker build -f tasks/Dockerfile .` (from monorepo root).
 
@@ -197,15 +199,30 @@ Task attachments are stored in MinIO (S3-compatible object storage). Configurati
 
 Object keys follow the pattern `{project}/{NNN}/{filename}`. The storage module (`ralph_tasks/storage.py`) uses a lazy-singleton pattern matching `graph/client.py`.
 
+### PostgreSQL metrics storage
+
+Session and task execution metrics are stored in PostgreSQL. The metrics module (`ralph_tasks/metrics/database.py`) uses a lazy-singleton `ThreadedConnectionPool` pattern matching `storage.py` and `graph/client.py`. Schema is created automatically via `ensure_schema()` on server startup (`CREATE TABLE IF NOT EXISTS`).
+
+Tables: `sessions` (command_type, project, model, cost, tokens, timestamps, exit_code) and `task_executions` (per-task metrics linked to session via FK with CASCADE delete).
+
+API endpoints (`/api/metrics/*`) provide summary, timeline, and breakdown aggregations for the dashboard. Protected by `ApiKeyMiddleware`. The `/dashboard` route serves the Chart.js-based UI (no auth required — fetches data via client-side JS with API key).
+
+ralph-cli sends metrics via fire-and-forget HTTP POST (`ralph_cli/metrics.py`, stdlib `urllib` only). If ralph-tasks is unavailable, a warning is logged and the workflow continues. If not configured (`ralph_tasks_api_url` is unset), submission is silently skipped.
+
+Configuration:
+- `POSTGRES_URI` — connection string (default: `postgresql://ralph:ralph@localhost:5432/ralph`, devcontainer: `postgresql://ralph:ralph-ai-sbx-password@ai-sbx-postgres:5432/ralph`)
+- `RALPH_TASKS_API_URL` — ralph-tasks base URL for CLI metric submission (ralph-cli config, env: `RALPH_TASKS_API_URL`)
+- `RALPH_TASKS_API_KEY` — API key for authentication (ralph-cli config, env: `RALPH_TASKS_API_KEY`)
+
 ### MinIO tests: auto-skip when unavailable
 
 MinIO tests use `@pytest.mark.minio` marker and auto-skip when MinIO is unreachable. The test conftest tries `ai-sbx-minio:9000` first (devcontainer via proxy-internal network), then `docker:59000`, then `localhost:59000`, then `localhost:19000` (test docker-compose). Override via `MINIO_TEST_ENDPOINT` env var. Test credentials: `MINIO_TEST_ACCESS_KEY`/`MINIO_TEST_SECRET_KEY` (defaults: `minioadmin`/`minioadmin`).
 
 ### PostgreSQL tests: auto-skip when unavailable
 
-> **Note:** conftest.py marker/fixtures not yet implemented — planned in task #82 (Database module). The conventions below describe the target design.
+PostgreSQL tests use `@pytest.mark.postgres` marker and auto-skip when the database is unreachable. The test conftest tries `ai-sbx-postgres:5432` first (devcontainer via proxy-internal network), then `docker:55432`, then `localhost:55432`, then `localhost:15432` (test docker-compose). Override via `POSTGRES_TEST_URI` env var. Test database/user: `ralph_test`/`ralph_test` (not the production `ralph`/`ralph`). Test credentials default password: `testpassword123`.
 
-PostgreSQL tests use `@pytest.mark.postgres` marker and auto-skip when the database is unreachable. The test conftest tries `ai-sbx-postgres:5432` first (devcontainer via proxy-internal network), then `docker:55432`, then `localhost:55432`, then `localhost:15432` (test docker-compose). Override via `POSTGRES_TEST_URI` env var. Test credentials: `POSTGRES_TEST_USER`/`POSTGRES_TEST_PASSWORD` (defaults: `ralph_test`/`testpassword123`).
+The `pg_database` fixture (per-test scope) sets `POSTGRES_URI` env var via monkeypatch, calls `ensure_schema()`, and truncates tables on teardown.
 
 ### Neo4j credentials: NEO4J_AUTH vs NEO4J_USER/NEO4J_PASSWORD
 
@@ -235,3 +252,12 @@ POSTGRES_DB: ralph
 # ralph-tasks app container (URI format):
 POSTGRES_URI: postgresql://ralph:ralph-ai-sbx-password@ai-sbx-postgres:5432/ralph
 ```
+
+### ralph-cli config: metrics submission
+
+ralph-cli uses settings from `~/.claude/.env` or environment variables to submit metrics to ralph-tasks:
+
+- `ralph_tasks_api_url` (env: `RALPH_TASKS_API_URL`) — ralph-tasks base URL (e.g., `http://ai-sbx-ralph-tasks:8000`)
+- `ralph_tasks_api_key` (env: `RALPH_TASKS_API_KEY`) — API key for `/api/*` endpoints
+
+If `ralph_tasks_api_url` is not set, metrics submission is silently skipped. The submission uses stdlib `urllib` (no external dependencies) with a 10-second timeout and never raises exceptions.
