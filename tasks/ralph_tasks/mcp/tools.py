@@ -13,13 +13,14 @@ from pathlib import Path
 from typing import Any
 
 from .. import storage
-from ..core import add_review_finding as _add_review_finding
 from ..core import (
+    VALID_STATUSES,
     copy_attachment,
     get_attachment_bytes,
     normalize_project_name,
     project_exists,
 )
+from ..core import add_review_finding as _add_review_finding
 from ..core import create_task as _create_task
 from ..core import decline_finding as _decline_finding
 from ..core import delete_attachment as _delete_attachment
@@ -30,6 +31,7 @@ from ..core import list_review_findings as _list_review_findings
 from ..core import list_tasks as _list_tasks
 from ..core import reply_to_finding as _reply_to_finding
 from ..core import resolve_finding as _resolve_finding
+from ..core import search_tasks as _search_tasks
 from ..core import update_task as _update_task
 
 logger = logging.getLogger("ralph-tasks.mcp")
@@ -86,6 +88,27 @@ def tasks_impl(project: str | None = None, number: int | None = None) -> dict | 
     if task is None:
         raise ValueError(f"Task #{number} not found in project '{project}'")
     return task.to_dict()
+
+
+def search_tasks_impl(
+    project: str,
+    query: str,
+    status: str | None = None,
+    module: str | None = None,
+) -> list[dict]:
+    """Search tasks by keywords across all text fields."""
+    if not query or not query.strip():
+        raise ValueError("query must not be empty")
+    if len(query.strip().split()) > 20:
+        raise ValueError("query must not exceed 20 keywords")
+    if status and status not in VALID_STATUSES:
+        raise ValueError(
+            f"Invalid status '{status}'. Valid statuses: {', '.join(sorted(VALID_STATUSES))}"
+        )
+    if not project_exists(project):
+        raise ValueError(f"Project '{project}' does not exist")
+    results = _search_tasks(project, query, status=status, module=module)
+    return [r.to_dict() for r in results]
 
 
 def create_task_impl(

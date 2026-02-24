@@ -146,6 +146,33 @@ class Task:
         }
 
 
+@dataclass
+class SearchResult:
+    """A single search result with match context.
+
+    The ``snippet`` field contains a context window around matched keywords.
+    It is an empty string when no context window could be extracted (e.g.
+    when keyword positions differ between Cypher and Python text reconstruction).
+    """
+
+    number: int
+    title: str
+    status: str
+    snippet: str
+    module: str | None = None
+
+    def to_dict(self) -> dict:
+        result = {
+            "number": self.number,
+            "title": self.title,
+            "status": self.status,
+            "snippet": self.snippet,
+        }
+        if self.module:
+            result["module"] = self.module
+        return result
+
+
 def _updated_at_to_timestamp(updated_at: str) -> float:
     """Convert ISO 8601 updated_at to Unix timestamp for backwards compat."""
     if not updated_at:
@@ -474,6 +501,94 @@ def update_task(project: str, number: int, **fields: Any) -> Task:
         # Re-read and return
         full = crud.get_task_full(session, project, number)
         return _task_from_graph(full)
+
+
+def search_tasks(
+    project: str,
+    query: str,
+    status: str | None = None,
+    module: str | None = None,
+) -> list[SearchResult]:
+    """Search tasks by space-separated keywords (AND logic).
+
+    Searches across task title, module, all section content, and finding text.
+    Returns matching tasks with context snippets.
+    """
+    project = normalize_project_name(project)
+    keywords = query.strip().split()
+    if not keywords:
+        return []
+
+    with _session() as session:
+        results = crud.search_tasks(session, project, keywords, status=status, module=module)
+
+    search_results = []
+    for task_dict in results:
+        parts = [
+            task_dict.get("title", ""),
+            task_dict.get("module") or "",
+        ]
+        for key, val in task_dict.items():
+            if key.startswith("section_") and val:
+                parts.append(val)
+        for ft in task_dict.get("_finding_texts", []):
+            parts.append(ft)
+        searchable = " ".join(parts)
+
+        snippet = _make_snippets(searchable, keywords)
+        if not snippet:
+            logger.debug("empty snippet for task #%s despite match", task_dict["number"])
+        search_results.append(
+            SearchResult(
+                number=task_dict["number"],
+                title=task_dict.get("title", ""),
+                status=task_dict.get("status", "todo"),
+                snippet=snippet,
+                module=task_dict.get("module"),
+            )
+        )
+
+    return search_results
+
+
+def _make_snippets(text: str, keywords: list[str], context_chars: int = 50) -> str:
+    """Generate snippet showing keyword matches with surrounding context.
+
+    Finds the first occurrence of each keyword and extracts a window of text
+    around it. When two keyword positions are close together (within one
+    window width), only the first keyword's window is included.
+    """
+    if not text or not keywords:
+        return ""
+
+    text_lower = text.lower()
+    snippets = []
+    seen_positions: set[int] = set()
+
+    for kw in keywords:
+        kw_lower = kw.lower()
+        pos = text_lower.find(kw_lower)
+        if pos == -1:
+            continue
+
+        # Skip if this keyword's position falls within an existing snippet window
+        window_size = len(kw) + context_chars * 2
+        if any(abs(pos - seen) < window_size for seen in seen_positions):
+            continue
+        seen_positions.add(pos)
+
+        start = max(0, pos - context_chars)
+        end = min(len(text), pos + len(kw) + context_chars)
+
+        snippet = text[start:end].strip()
+        if start > 0:
+            snippet = "..." + snippet
+        if end < len(text):
+            snippet = snippet + "..."
+
+        snippets.append(snippet)
+
+    return " | ".join(snippets) if snippets else ""
 
 
 def delete_task(project: str, number: int) -> bool:

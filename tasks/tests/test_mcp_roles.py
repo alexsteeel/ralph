@@ -10,7 +10,7 @@ from ralph_tasks.mcp.reviewer import _get_review_type
 from ralph_tasks.mcp.reviewer import mcp as reviewer_mcp
 from ralph_tasks.mcp.swe import _SWE_UPDATE_FIELDS
 from ralph_tasks.mcp.swe import mcp as swe_mcp
-from ralph_tasks.mcp.tools import _validate_source_path, update_task_impl
+from ralph_tasks.mcp.tools import _validate_source_path, search_tasks_impl, update_task_impl
 
 
 def _tool_names(mcp_instance) -> set[str]:
@@ -31,6 +31,7 @@ class TestSweToolSet:
         assert "tasks" in names
         assert "create_task" in names
         assert "update_task" in names
+        assert "search_tasks" in names
 
     def test_has_review_read_reply_decline(self):
         names = _tool_names(swe_mcp)
@@ -57,6 +58,7 @@ class TestReviewerToolSet:
     def test_has_read_only_tasks(self):
         names = _tool_names(reviewer_mcp)
         assert "tasks" in names
+        assert "search_tasks" in names
 
     def test_cannot_create_or_update_tasks(self):
         names = _tool_names(reviewer_mcp)
@@ -90,6 +92,7 @@ class TestPlannerToolSet:
         assert "tasks" in names
         assert "create_task" in names
         assert "update_task" in names
+        assert "search_tasks" in names
 
     def test_read_only_findings(self):
         names = _tool_names(planner_mcp)
@@ -255,6 +258,43 @@ class TestGetReviewType:
         ctx.request_context = None
         with pytest.raises(ValueError, match="review_type query parameter is required"):
             _get_review_type(ctx)
+
+
+# ---------------------------------------------------------------------------
+# search_tasks_impl validation tests (#73)
+# ---------------------------------------------------------------------------
+
+
+class TestSearchTasksImplValidation:
+    """search_tasks_impl should validate project, query, and status."""
+
+    @patch("ralph_tasks.mcp.tools.project_exists", return_value=False)
+    def test_nonexistent_project_raises(self, mock_exists):
+        with pytest.raises(ValueError, match="does not exist"):
+            search_tasks_impl("no-such-project", "keyword")
+
+    def test_empty_query_raises(self):
+        with pytest.raises(ValueError, match="query must not be empty"):
+            search_tasks_impl("proj", "")
+
+    def test_whitespace_query_raises(self):
+        with pytest.raises(ValueError, match="query must not be empty"):
+            search_tasks_impl("proj", "   ")
+
+    @patch("ralph_tasks.mcp.tools.project_exists", return_value=True)
+    def test_invalid_status_raises(self, mock_exists):
+        with pytest.raises(ValueError, match="Invalid status"):
+            search_tasks_impl("proj", "keyword", status="completed")
+
+    @patch("ralph_tasks.mcp.tools.project_exists", return_value=True)
+    def test_invalid_status_in_progress_raises(self, mock_exists):
+        with pytest.raises(ValueError, match="Invalid status"):
+            search_tasks_impl("proj", "keyword", status="in-progress")
+
+    def test_too_many_keywords_raises(self):
+        query = " ".join(f"kw{i}" for i in range(21))
+        with pytest.raises(ValueError, match="must not exceed 20 keywords"):
+            search_tasks_impl("proj", query)
 
 
 # ---------------------------------------------------------------------------

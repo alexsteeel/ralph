@@ -17,6 +17,7 @@ from .tools import (
     list_review_findings_impl,
     read_attachment_impl,
     reply_to_finding_impl,
+    search_tasks_impl,
     tasks_impl,
     update_task_impl,
 )
@@ -57,6 +58,27 @@ def tasks(project: str | None = None, number: int | None = None) -> dict | list:
         - tasks(project, number) -> full task details including plan
     """
     return tasks_impl(project, number)
+
+
+@mcp.tool
+def search_tasks(
+    project: str,
+    query: str,
+    status: str | None = None,
+    module: str | None = None,
+) -> list[dict]:
+    """Search tasks by keywords across all text fields.
+
+    Args:
+        project: Project name
+        query: Space-separated keywords (all must match, AND logic)
+        status: Optional filter by status (todo, work, done, hold, approved)
+        module: Optional filter by module
+
+    Returns:
+        List of matching tasks with number, title, status, and snippet
+    """
+    return search_tasks_impl(project, query, status=status, module=module)
 
 
 @mcp.tool

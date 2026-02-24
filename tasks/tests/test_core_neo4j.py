@@ -4,7 +4,7 @@ import logging
 
 import pytest
 from ralph_tasks import core
-from ralph_tasks.core import normalize_project_name
+from ralph_tasks.core import SearchResult, _make_snippets, normalize_project_name
 from ralph_tasks.graph import crud
 from ralph_tasks.graph.schema import ensure_schema
 
@@ -511,3 +511,175 @@ class TestReviewFindings:
         core.add_review_finding("my_proj", 1, "code-review", "Bug", "r1")
         findings = core.list_review_findings("my_proj", 1)
         assert len(findings) == 1
+
+
+# ---------------------------------------------------------------------------
+# _make_snippets (unit tests, no Neo4j)
+# ---------------------------------------------------------------------------
+
+
+class TestMakeSnippets:
+    """Unit tests for _make_snippets helper — no Neo4j required."""
+
+    def test_single_keyword_match(self):
+        text = "The quick brown fox jumps over the lazy dog"
+        result = _make_snippets(text, ["fox"])
+        assert "fox" in result
+
+    def test_multiple_keywords(self):
+        text = "a" * 200 + " postgres " + "b" * 200 + " observability " + "c" * 200
+        result = _make_snippets(text, ["postgres", "observability"])
+        assert "postgres" in result
+        assert "observability" in result
+
+    def test_case_insensitive(self):
+        text = "PostgreSQL is a database"
+        result = _make_snippets(text, ["postgresql"])
+        assert "PostgreSQL" in result
+
+    def test_no_match_returns_empty(self):
+        text = "Hello world"
+        result = _make_snippets(text, ["missing"])
+        assert result == ""
+
+    def test_empty_text_returns_empty(self):
+        assert _make_snippets("", ["kw"]) == ""
+
+    def test_empty_keywords_returns_empty(self):
+        assert _make_snippets("some text", []) == ""
+
+    def test_ellipsis_at_start(self):
+        text = "x" * 100 + " keyword here"
+        result = _make_snippets(text, ["keyword"])
+        assert result.startswith("...")
+
+    def test_ellipsis_at_end(self):
+        text = "keyword here " + "x" * 100
+        result = _make_snippets(text, ["keyword"])
+        assert result.endswith("...")
+
+    def test_no_ellipsis_at_start(self):
+        """No leading ellipsis when keyword is at the very beginning."""
+        text = "keyword at start"
+        result = _make_snippets(text, ["keyword"])
+        assert not result.startswith("...")
+
+    def test_no_ellipsis_at_end(self):
+        """No trailing ellipsis when keyword is at the very end."""
+        text = "ends with keyword"
+        result = _make_snippets(text, ["keyword"])
+        assert not result.endswith("...")
+
+    def test_overlapping_snippets_deduplicated(self):
+        """Close keywords produce a single snippet, not two."""
+        text = "aaa foo bbb bar ccc"
+        result = _make_snippets(text, ["foo", "bar"])
+        # foo at pos 4, bar at pos 12 — within window, only one snippet
+        assert "|" not in result
+        assert "foo" in result
+
+    def test_distant_keywords_produce_separate_snippets(self):
+        """Keywords far apart produce separate snippets joined by ' | '."""
+        text = "a" * 200 + " alpha " + "b" * 200 + " beta " + "c" * 200
+        result = _make_snippets(text, ["alpha", "beta"])
+        assert " | " in result
+        assert "alpha" in result
+        assert "beta" in result
+
+
+# ---------------------------------------------------------------------------
+# SearchResult
+# ---------------------------------------------------------------------------
+
+
+class TestSearchResult:
+    """Unit tests for SearchResult dataclass — no Neo4j required."""
+
+    def test_to_dict(self):
+        sr = SearchResult(number=1, title="Task", status="todo", snippet="...match...")
+        d = sr.to_dict()
+        assert d == {
+            "number": 1,
+            "title": "Task",
+            "status": "todo",
+            "snippet": "...match...",
+        }
+
+    def test_to_dict_with_module(self):
+        sr = SearchResult(number=1, title="Task", status="todo", snippet="...", module="auth")
+        d = sr.to_dict()
+        assert d["module"] == "auth"
+
+    def test_to_dict_without_module(self):
+        sr = SearchResult(number=1, title="Task", status="todo", snippet="...")
+        d = sr.to_dict()
+        assert "module" not in d
+
+
+# ---------------------------------------------------------------------------
+# search_tasks (integration, requires Neo4j)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.neo4j
+class TestSearchTasks:
+    def test_search_by_title(self, graph_core):
+        core.create_task("proj", "Add PostgreSQL support")
+        core.create_task("proj", "Fix login bug")
+        results = core.search_tasks("proj", "postgresql")
+        assert len(results) == 1
+        assert results[0].number == 1
+
+    def test_search_by_description(self, graph_core):
+        core.create_task("proj", "Task one", description="Contains keyword foobar in body")
+        core.create_task("proj", "Task two", description="Nothing special here")
+        results = core.search_tasks("proj", "foobar")
+        assert len(results) == 1
+        assert results[0].number == 1
+
+    def test_search_by_plan(self, graph_core):
+        core.create_task("proj", "Task", plan="Use OpenSearch for indexing")
+        results = core.search_tasks("proj", "opensearch")
+        assert len(results) == 1
+
+    def test_search_and_logic(self, graph_core):
+        core.create_task("proj", "PostgreSQL monitoring", description="Add metrics dashboard")
+        core.create_task("proj", "PostgreSQL backup", description="Cron job setup")
+        results = core.search_tasks("proj", "postgresql dashboard")
+        assert len(results) == 1
+        assert results[0].number == 1
+
+    def test_search_filter_by_status(self, graph_core):
+        core.create_task("proj", "Done task", status="done", description="keyword")
+        core.create_task("proj", "Todo task", description="keyword")
+        results = core.search_tasks("proj", "keyword", status="todo")
+        assert len(results) == 1
+        assert results[0].status == "todo"
+
+    def test_search_filter_by_module(self, graph_core):
+        core.create_task("proj", "Auth task", module="auth", description="important keyword")
+        core.create_task("proj", "API task", module="api", description="important keyword")
+        results = core.search_tasks("proj", "keyword", module="auth")
+        assert len(results) == 1
+        assert results[0].number == 1
+
+    def test_search_empty_query(self, graph_core):
+        core.create_task("proj", "Some task")
+        results = core.search_tasks("proj", "")
+        assert results == []
+
+    def test_search_no_matches(self, graph_core):
+        core.create_task("proj", "Some task")
+        results = core.search_tasks("proj", "nonexistent")
+        assert results == []
+
+    def test_search_returns_snippet(self, graph_core):
+        core.create_task("proj", "Task", description="The quick brown fox jumps over lazy dog")
+        results = core.search_tasks("proj", "fox")
+        assert len(results) == 1
+        assert "fox" in results[0].snippet
+
+    def test_search_project_name_normalization(self, graph_core):
+        core.create_task("my-proj", "Task", description="contains keyword")
+        results = core.search_tasks("my_proj", "keyword")
+        assert len(results) == 1

@@ -682,3 +682,139 @@ class TestCreateTaskExtended:
         crud.create_project(neo4j_session, "ws", "proj")
         task = crud.create_task(neo4j_session, "proj", "Task", number=42)
         assert task["number"] == 42
+
+
+@pytest.mark.neo4j
+class TestSearchTasks:
+    def _setup_project(self, session):
+        """Helper: create workspace + project."""
+        crud.create_workspace(session, "ws")
+        crud.create_project(session, "ws", "proj")
+
+    def test_search_by_title(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Add PostgreSQL support")
+        crud.create_task(neo4j_session, "proj", "Fix login bug")
+        results = crud.search_tasks(neo4j_session, "proj", ["postgresql"])
+        assert len(results) == 1
+        assert results[0]["title"] == "Add PostgreSQL support"
+
+    def test_search_by_section_content(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Task A")
+        crud.create_task(neo4j_session, "proj", "Task B")
+        crud.upsert_section(
+            neo4j_session, "proj", 1, "description", "Uses OpenSearch for full-text"
+        )
+        crud.upsert_section(neo4j_session, "proj", 2, "description", "Nothing relevant")
+        results = crud.search_tasks(neo4j_session, "proj", ["opensearch"])
+        assert len(results) == 1
+        assert results[0]["number"] == 1
+        assert results[0]["section_description"] == "Uses OpenSearch for full-text"
+
+    def test_search_by_finding_text(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Reviewed task")
+        crud.create_finding(
+            neo4j_session, "proj", 1, "code-review", "SQL injection risk in auth.py", "rev"
+        )
+        results = crud.search_tasks(neo4j_session, "proj", ["injection"])
+        assert len(results) == 1
+        assert results[0]["number"] == 1
+        assert "SQL injection risk in auth.py" in results[0]["_finding_texts"]
+
+    def test_search_and_logic(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "PostgreSQL monitoring")
+        crud.upsert_section(neo4j_session, "proj", 1, "description", "Add metrics dashboard")
+        crud.create_task(neo4j_session, "proj", "PostgreSQL backup")
+        crud.upsert_section(neo4j_session, "proj", 2, "description", "Cron job setup")
+        results = crud.search_tasks(neo4j_session, "proj", ["postgresql", "dashboard"])
+        assert len(results) == 1
+        assert results[0]["number"] == 1
+
+    def test_search_filter_by_status(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Done task", status="done")
+        crud.upsert_section(neo4j_session, "proj", 1, "description", "keyword")
+        crud.create_task(neo4j_session, "proj", "Todo task")
+        crud.upsert_section(neo4j_session, "proj", 2, "description", "keyword")
+        results = crud.search_tasks(neo4j_session, "proj", ["keyword"], status="todo")
+        assert len(results) == 1
+        assert results[0]["status"] == "todo"
+
+    def test_search_filter_by_module(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Auth task", module="auth")
+        crud.upsert_section(neo4j_session, "proj", 1, "description", "keyword")
+        crud.create_task(neo4j_session, "proj", "API task", module="api")
+        crud.upsert_section(neo4j_session, "proj", 2, "description", "keyword")
+        results = crud.search_tasks(neo4j_session, "proj", ["keyword"], module="auth")
+        assert len(results) == 1
+        assert results[0]["module"] == "auth"
+
+    def test_search_case_insensitive(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "PostgreSQL Setup Guide")
+        results = crud.search_tasks(neo4j_session, "proj", ["postgresql"])
+        assert len(results) == 1
+
+    def test_search_empty_keywords(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Some task")
+        results = crud.search_tasks(neo4j_session, "proj", [])
+        assert results == []
+
+    def test_search_no_matches(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Some task")
+        results = crud.search_tasks(neo4j_session, "proj", ["nonexistent"])
+        assert results == []
+
+    def test_search_by_module_field(self, neo4j_session):
+        """Module value itself is searchable (not just a filter)."""
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Task", module="authentication")
+        results = crud.search_tasks(neo4j_session, "proj", ["authentication"])
+        assert len(results) == 1
+
+    def test_search_ordered_by_number(self, neo4j_session):
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "keyword task C")
+        crud.create_task(neo4j_session, "proj", "keyword task A")
+        crud.create_task(neo4j_session, "proj", "keyword task B")
+        results = crud.search_tasks(neo4j_session, "proj", ["keyword"])
+        numbers = [r["number"] for r in results]
+        assert numbers == [1, 2, 3]
+
+    def test_search_isolated_by_project(self, neo4j_session):
+        """Search in proj-a must not return tasks from proj-b."""
+        crud.create_workspace(neo4j_session, "ws")
+        crud.create_project(neo4j_session, "ws", "proj-a")
+        crud.create_project(neo4j_session, "ws", "proj-b")
+        crud.create_task(neo4j_session, "proj-a", "shared keyword task")
+        crud.create_task(neo4j_session, "proj-b", "shared keyword task")
+        results_a = crud.search_tasks(neo4j_session, "proj-a", ["keyword"])
+        results_b = crud.search_tasks(neo4j_session, "proj-b", ["keyword"])
+        assert len(results_a) == 1
+        assert len(results_b) == 1
+        assert results_a[0]["number"] == 1
+        assert results_b[0]["number"] == 1
+
+    def test_search_by_report_section(self, neo4j_session):
+        """report section content is searchable."""
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Task")
+        crud.upsert_section(neo4j_session, "proj", 1, "report", "Deployed to production")
+        results = crud.search_tasks(neo4j_session, "proj", ["deployed"])
+        assert len(results) == 1
+        assert results[0]["section_report"] == "Deployed to production"
+
+    def test_search_by_blocks_section(self, neo4j_session):
+        """blocks section content is searchable."""
+        self._setup_project(neo4j_session)
+        crud.create_task(neo4j_session, "proj", "Task")
+        crud.upsert_section(neo4j_session, "proj", 1, "blocks", "Waiting for API approval")
+        results = crud.search_tasks(neo4j_session, "proj", ["approval"])
+        assert len(results) == 1
+        assert results[0]["section_blocks"] == "Waiting for API approval"

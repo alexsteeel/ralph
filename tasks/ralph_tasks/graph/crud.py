@@ -990,6 +990,69 @@ def create_workflow_step(
     return step
 
 
+def search_tasks(
+    session: Session,
+    project_name: str,
+    keywords: list[str],
+    status: str | None = None,
+    module: str | None = None,
+) -> list[dict]:
+    """Search tasks by keywords using case-insensitive CONTAINS.
+
+    All keywords must match (AND logic). Searches across task title, module,
+    all Section content, and Finding text.
+
+    Returns list of task dicts with ``section_<type>`` keys and
+    ``_finding_texts`` for snippet generation.
+    """
+    if not keywords:
+        return []
+
+    params: dict[str, Any] = {"project": project_name}
+    filters: list[str] = []
+    for i, kw in enumerate(keywords):
+        params[f"kw{i}"] = kw.lower()
+        filters.append(f"searchable CONTAINS $kw{i}")
+    if status:
+        filters.append("t.status = $status")
+        params["status"] = status
+    if module:
+        filters.append("t.module = $module")
+        params["module"] = module
+
+    where_clause = " AND ".join(filters)
+
+    query = f"""
+        MATCH (p:Project {{name: $project}})-[:HAS_TASK]->(t:Task)
+        OPTIONAL MATCH (t)-[:HAS_SECTION]->(s:Section)
+        OPTIONAL MATCH (s)-[:HAS_FINDING]->(f:Finding)
+        WITH t,
+             collect(DISTINCT s {{.type, .content}}) AS sections,
+             collect(DISTINCT f.text) AS finding_texts
+        WITH t, sections, finding_texts,
+             toLower(
+                 COALESCE(t.title, '') + ' ' +
+                 COALESCE(t.module, '') + ' ' +
+                 reduce(acc = '', sec IN sections | acc + ' ' + COALESCE(sec.content, '')) + ' ' +
+                 reduce(acc = '', ft IN finding_texts | acc + ' ' + COALESCE(ft, ''))
+             ) AS searchable
+        WHERE {where_clause}
+        RETURN t {{.*}} AS task, sections, finding_texts
+        ORDER BY t.number
+    """
+
+    result = session.run(query, **params)
+    tasks = []
+    for r in result:
+        task_dict = dict(r["task"])
+        for sec in r["sections"]:
+            if sec["type"] is not None:
+                task_dict[f"section_{sec['type']}"] = sec["content"] or ""
+        task_dict["_finding_texts"] = [ft for ft in r["finding_texts"] if ft]
+        tasks.append(task_dict)
+    return tasks
+
+
 def update_workflow_step(
     session: Session,
     element_id: str,

@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- **tasks: `search_tasks` MCP tool for keyword search across tasks** (#73)
+  - New `search_tasks` tool in all MCP role endpoints (swe, reviewer, planner)
+  - Full-text search across task title, module, section content, and finding text
+  - Space-separated keywords with AND logic (all must match)
+  - Optional filters by status and module
+  - Context snippets showing where keywords matched
+  - Implementation: Option B (Cypher `toLower(x) CONTAINS $kw`, no indexes)
+  - Three-layer architecture: `crud.search_tasks()` → `core.search_tasks()` → MCP tool
+  - `SearchResult` dataclass with `to_dict()` and `_make_snippets()` helper
+  - 22 new tests: 8 unit (snippets), 12 CRUD integration, 10 core integration, 3 MCP role
 - **sandbox: build ralph-tasks image in `ai-sbx image build`** (#76)
   - New `MONOREPO_IMAGES` constant for images built from monorepo root (not dockerfiles dir)
   - Two-phase build collection: dockerfiles-dir images + monorepo images
