@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Changed
+- **tasks: MCP role endpoints — swe + reviewer + planner with distinct tool sets** (#13)
+  - Split monolithic `/mcp` endpoint into 3 role-based HTTP endpoints:
+    - `/mcp-swe` — developer tools (status, module, branch, report, blocks, findings read/reply/decline, attachments)
+    - `/mcp-review` — reviewer tools (read-only tasks, add/list/reply/resolve findings, read-only attachments)
+    - `/mcp-plan` — planner tools (title, description, plan, blocks, status, read-only findings, attachments)
+  - New `ralph_tasks/mcp/` package with `tools.py` (shared implementations), `swe.py`, `reviewer.py`, `planner.py`
+  - `update_task_impl(allowed_fields, **kwargs)` pattern with `frozenset` whitelists for role-based field restrictions
+  - `ReviewTypeValidationMiddleware` — validates `review_type` query param on `/mcp-review` (HTTP 400 if missing)
+  - Reviewer's `review_type` injected from URL query params via `_get_review_type(ctx)` — reviewers never specify it manually
+  - Task field renaming: `description` → `title` (Task node property), `body` → `description` (Section content)
+  - `_migrate_task_titles()` — Neo4j data migration for existing Task nodes at startup
+  - Removed `ralph-tasks` CLI entry point (`ralph_tasks.mcp:main`), stdio transport dropped (HTTP-only)
+  - Updated `entrypoint.sh`: MCP URL `/mcp` → `/mcp-swe`, removed stdio fallback
+  - Middleware ordering: `ApiKeyMiddleware` outermost → `ReviewTypeValidationMiddleware` → app
+  - New/updated tests: `test_web_mcp_mount.py` (rewritten: role mounts, review_type validation, field names, auth)
+  - Updated templates: `kanban.html`, `base.html`, `projects.html` (field renaming in JS/Jinja2)
+
 ### Removed
 - **ralph-sandbox:** "Open in IDE" option from `ai-sbx worktree connect` (#70)
   - Removed `--ide` CLI option, IDE preference loading, and IDE menu choices

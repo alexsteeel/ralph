@@ -38,7 +38,7 @@ class TestSchemaInit:
                 "SHOW INDEXES YIELD name, type WHERE type = 'FULLTEXT' RETURN name"
             )
             names = {r["name"] for r in result}
-            assert "task_description_ft" in names
+            assert "task_title_ft" in names
             assert "finding_text_ft" in names
 
     def test_ensure_schema_idempotent(self, neo4j_client):

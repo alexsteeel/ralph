@@ -17,7 +17,6 @@ dependencies = [
 ]
 
 [project.scripts]
-ralph-tasks = "ralph_tasks.mcp:main"
 ralph-tasks-web = "ralph_tasks.web:main"
 
 [tool.hatch.build.targets.wheel]

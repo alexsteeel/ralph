@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import sys
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -46,14 +47,14 @@ VALID_STATUSES = {"todo", "work", "done", "approved", "hold"}
 
 # Section type mapping: Task dataclass field -> Neo4j Section type
 _SECTION_FIELDS = {
-    "body": "description",
+    "description": "description",
     "plan": "plan",
     "report": "report",
     "blocks": "blocks",
 }
 
 # Task-level fields stored directly on the Task node
-_TASK_NODE_FIELDS = {"description", "status", "module", "branch", "started", "completed"}
+_TASK_NODE_FIELDS = {"title", "status", "module", "branch", "started", "completed"}
 
 
 # Configure logging
@@ -68,7 +69,8 @@ if not logger.handlers:
             )
         )
         logger.addHandler(_handler)
-    except Exception:
+    except Exception as _log_err:
+        print(f"md-task-mcp: failed to create log file {LOG_FILE}: {_log_err}", file=sys.stderr)
         logger.addHandler(logging.NullHandler())
 logger.info(
     f"md-task-mcp core loaded (Neo4j + MinIO). BASE_DIR={BASE_DIR}, uid={os.getuid()}, gid={os.getgid()}"
@@ -112,13 +114,13 @@ class Task:
     """Represents a task stored in Neo4j."""
 
     number: int
-    description: str = ""
+    title: str = ""
     module: str | None = None
     branch: str | None = None
     status: str = "todo"
     started: str | None = None
     completed: str | None = None
-    body: str = ""
+    description: str = ""
     plan: str = ""
     report: str = ""
     blocks: str = ""
@@ -129,13 +131,13 @@ class Task:
         """Convert task to dictionary for API responses."""
         return {
             "number": self.number,
-            "description": self.description,
+            "title": self.title,
             "module": self.module,
             "branch": self.branch,
             "status": self.status,
             "started": self.started,
             "completed": self.completed,
-            "body": self.body.strip(),
+            "description": self.description.strip(),
             "plan": self.plan.strip(),
             "report": self.report.strip(),
             "blocks": self.blocks.strip(),
@@ -182,6 +184,7 @@ def _ensure_graph_ready() -> None:
             if ws is None:
                 crud.create_workspace(session, DEFAULT_WORKSPACE)
             _migrate_project_names(session)
+            _migrate_task_titles(session)
         _schema_initialized = True
 
 
@@ -214,6 +217,7 @@ def _migrate_project_names(session: Session) -> None:
             storage.migrate_project_prefix(name, canonical)
         except (S3Error, Urllib3HTTPError, OSError) as e:
             logger.warning(f"MinIO migration failed for '{name}' -> '{canonical}': {e}")
+            continue  # Skip Neo4j rename to keep attachments accessible
 
         result = crud.rename_project(session, DEFAULT_WORKSPACE, name, canonical)
         if result is None:
@@ -222,6 +226,27 @@ def _migrate_project_names(session: Session) -> None:
         canonical_names.discard(name)
         canonical_names.add(canonical)
         logger.info(f"Migrated project name: '{name}' -> '{canonical}'")
+
+
+def _migrate_task_titles(session: Session) -> None:
+    """Rename Task.description → Task.title on existing nodes.
+
+    Runs once at startup. Only touches Task nodes that have a ``description``
+    property but no ``title`` property (i.e., created before the rename).
+    """
+    result = session.run(
+        """
+        MATCH (t:Task)
+        WHERE t.description IS NOT NULL AND t.title IS NULL
+        SET t.title = t.description
+        REMOVE t.description
+        RETURN count(t) AS migrated
+        """
+    )
+    record = result.single()
+    count = record["migrated"] if record else 0
+    if count:
+        logger.info(f"Migrated {count} Task node(s): description → title")
 
 
 def reset_client() -> None:
@@ -254,13 +279,13 @@ def _task_from_graph(d: dict) -> Task:
     """
     return Task(
         number=d["number"],
-        description=d.get("description", ""),
+        title=d.get("title", ""),
         module=d.get("module"),
         branch=d.get("branch"),
         status=d.get("status", "todo"),
         started=d.get("started"),
         completed=d.get("completed"),
-        body=d.get("section_description", ""),
+        description=d.get("section_description", ""),
         plan=d.get("section_plan", ""),
         report=d.get("section_report", ""),
         blocks=d.get("section_blocks", ""),
@@ -330,8 +355,8 @@ def set_project_description(name: str, description: str) -> None:
 
 def create_task(
     project: str,
-    description: str,
-    body: str = "",
+    title: str,
+    description: str = "",
     plan: str = "",
     **fields: Any,
 ) -> Task:
@@ -352,12 +377,12 @@ def create_task(
             if fields.get(key) is not None
         }
 
-        task_dict = crud.create_task(session, project, description, **task_fields)
+        task_dict = crud.create_task(session, project, title, **task_fields)
         task_number = task_dict["number"]
 
         # Create sections for non-empty content
-        if body:
-            crud.upsert_section(session, project, task_number, "description", body)
+        if description:
+            crud.upsert_section(session, project, task_number, "description", description)
         if plan:
             crud.upsert_section(session, project, task_number, "plan", plan)
 

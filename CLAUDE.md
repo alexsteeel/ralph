@@ -127,23 +127,20 @@ The `ai-sbx image build` command uses the monorepo root as Docker build context,
 The ralph-tasks MCP server runs as a shared Docker container (`ai-sbx-ralph-tasks`) serving both the Kanban web UI and MCP endpoint on port 8000:
 
 - `http://ai-sbx-ralph-tasks:8000/` — Kanban web UI (from devcontainer via `ai-sbx-proxy-internal` network)
-- `http://ai-sbx-ralph-tasks:8000/mcp` — MCP endpoint (streamable-http)
+- `http://ai-sbx-ralph-tasks:8000/mcp-swe` — SWE role MCP endpoint (streamable-http)
+- `http://ai-sbx-ralph-tasks:8000/mcp-review?review_type=<type>` — Reviewer role MCP endpoint
+- `http://ai-sbx-ralph-tasks:8000/mcp-plan` — Planner role MCP endpoint
 - `http://ai-sbx-ralph-tasks:8000/health` — Docker HEALTHCHECK
 - `http://localhost:58000/` — Kanban web UI (from host, via port mapping)
 
 Build: `docker build -f tasks/Dockerfile .` (from monorepo root).
 
-MCP server registration in `entrypoint.sh` (with health check fallback):
+MCP server registration in `entrypoint.sh` (HTTP-only, no stdio fallback):
 ```bash
-# Prefer streamable-http if container is running, fallback to local stdio
 # Devcontainer reaches ralph-tasks via ai-sbx-proxy-internal network
-# When RALPH_TASKS_API_KEY is set, adds --header for auth and skips stdio fallback
+# Uses /mcp-swe endpoint (SWE role with full developer access)
 if curl -sf --max-time 3 "http://ai-sbx-ralph-tasks:8000/health" >/dev/null 2>&1; then
-    claude mcp add -s user --transport http [--header "Authorization: Bearer $KEY"] ralph-tasks "http://ai-sbx-ralph-tasks:8000/mcp"
-elif [ -n "$RALPH_TASKS_API_KEY" ]; then
-    # Stdio fallback skipped — auth requires network transport
-else
-    claude mcp add -s user ralph-tasks -- ralph-tasks serve
+    claude mcp add -s user --transport http [--header "Authorization: Bearer $KEY"] ralph-tasks "http://ai-sbx-ralph-tasks:8000/mcp-swe"
 fi
 ```
 
@@ -152,7 +149,7 @@ Environment variables for ralph-tasks container:
 - `NEO4J_USER` / `NEO4J_PASSWORD` — Neo4j credentials
 - `MINIO_ENDPOINT` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` — MinIO credentials
 - `RALPH_TASKS_HOST` / `RALPH_TASKS_PORT` — bind address (default: `127.0.0.1:8000`)
-- `RALPH_TASKS_API_KEY` — API key for `/api/*` and `/mcp/*` authentication (empty = disabled)
+- `RALPH_TASKS_API_KEY` — API key for `/api/*` and `/mcp-*` authentication (empty = disabled)
 - `RALPH_TASKS_MAX_UPLOAD_MB` — maximum upload size in MB (default: `50`)
 
 ## Development Notes

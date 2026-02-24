@@ -88,7 +88,7 @@ class TestTaskCRUD:
         crud.create_project(neo4j_session, "ws", "proj")
         task = crud.create_task(neo4j_session, "proj", "First task")
         assert task["number"] == 1
-        assert task["description"] == "First task"
+        assert task["title"] == "First task"
         assert task["status"] == "todo"
 
     def test_create_task_auto_increment(self, neo4j_session):
@@ -109,7 +109,7 @@ class TestTaskCRUD:
         crud.create_task(neo4j_session, "proj", "Task")
         task = crud.get_task(neo4j_session, "proj", 1)
         assert task is not None
-        assert task["description"] == "Task"
+        assert task["title"] == "Task"
 
     def test_get_task_not_found(self, neo4j_session):
         crud.create_workspace(neo4j_session, "ws")
@@ -155,7 +155,7 @@ class TestSubtaskCRUD:
         crud.create_project(neo4j_session, "ws", "proj")
         crud.create_task(neo4j_session, "proj", "Parent")
         sub = crud.create_subtask(neo4j_session, "proj", 1, "Subtask")
-        assert sub["description"] == "Subtask"
+        assert sub["title"] == "Subtask"
         assert sub["number"] == 2  # next after parent
 
     def test_list_subtasks(self, neo4j_session):
@@ -536,7 +536,7 @@ class TestGetTaskFull:
         crud.create_section(neo4j_session, "proj", 1, "plan", "Plan text")
         full = crud.get_task_full(neo4j_session, "proj", 1)
         assert full is not None
-        assert full["description"] == "Task"
+        assert full["title"] == "Task"
         assert full["section_description"] == "Body text"
         assert full["section_plan"] == "Plan text"
 

@@ -85,16 +85,18 @@ class TestCreateTask:
         assert task.number == 1
         assert core.project_exists("new-proj")
 
-    def test_create_task_with_body_and_plan(self, graph_core):
-        task = core.create_task("proj", "Task with sections", body="The body", plan="The plan")
-        assert task.body == "The body"
+    def test_create_task_with_description_and_plan(self, graph_core):
+        task = core.create_task(
+            "proj", "Task with sections", description="The description", plan="The plan"
+        )
+        assert task.description == "The description"
         assert task.plan == "The plan"
 
     def test_create_task_with_fields(self, graph_core):
         task = core.create_task(
             "proj",
             "Full task",
-            body="desc",
+            description="desc",
             plan="plan",
             status="work",
             module="auth",
@@ -110,11 +112,11 @@ class TestCreateTask:
 @pytest.mark.neo4j
 class TestGetTask:
     def test_get_task_with_sections(self, graph_core):
-        core.create_task("proj", "Task", body="Body text", plan="Plan text")
+        core.create_task("proj", "Task", description="Body text", plan="Plan text")
         task = core.get_task("proj", 1)
         assert task is not None
-        assert task.description == "Task"
-        assert task.body == "Body text"
+        assert task.title == "Task"
+        assert task.description == "Body text"
         assert task.plan == "Plan text"
 
     def test_get_task_not_found(self, graph_core):
@@ -125,23 +127,23 @@ class TestGetTask:
 @pytest.mark.neo4j
 class TestListTasks:
     def test_list_tasks_no_sections(self, graph_core):
-        core.create_task("proj", "Task A", body="Body A")
-        core.create_task("proj", "Task B", body="Body B")
+        core.create_task("proj", "Task A", description="Body A")
+        core.create_task("proj", "Task B", description="Body B")
         tasks = core.list_tasks("proj")
         assert len(tasks) == 2
         assert tasks[0].number == 1
         assert tasks[1].number == 2
         # Summary mode — no section content
-        assert tasks[0].body == ""
-        assert tasks[1].body == ""
+        assert tasks[0].description == ""
+        assert tasks[1].description == ""
 
 
 @pytest.mark.neo4j
 class TestUpdateTask:
     def test_update_task_fields(self, graph_core):
         core.create_task("proj", "Task")
-        updated = core.update_task("proj", 1, description="Updated", module="api")
-        assert updated.description == "Updated"
+        updated = core.update_task("proj", 1, title="Updated", module="api")
+        assert updated.title == "Updated"
         assert updated.module == "api"
 
     def test_update_task_sections(self, graph_core):
@@ -149,12 +151,12 @@ class TestUpdateTask:
         updated = core.update_task(
             "proj",
             1,
-            body="New body",
+            description="New description",
             plan="New plan",
             report="Report",
             blocks="Blocked",
         )
-        assert updated.body == "New body"
+        assert updated.description == "New description"
         assert updated.plan == "New plan"
         assert updated.report == "Report"
         assert updated.blocks == "Blocked"
@@ -186,7 +188,7 @@ class TestUpdateTask:
     def test_update_task_not_found_raises(self, graph_core):
         core.create_project("proj")
         with pytest.raises(ValueError, match="not found"):
-            core.update_task("proj", 999, description="Nope")
+            core.update_task("proj", 999, title="Nope")
 
     def test_update_task_invalid_status_raises(self, graph_core):
         core.create_task("proj", "Task")
@@ -194,9 +196,9 @@ class TestUpdateTask:
             core.update_task("proj", 1, status="invalid")
 
     def test_update_clear_section(self, graph_core):
-        core.create_task("proj", "Task", body="Some body")
-        updated = core.update_task("proj", 1, body="")
-        assert updated.body == ""
+        core.create_task("proj", "Task", description="Some description")
+        updated = core.update_task("proj", 1, description="")
+        assert updated.description == ""
 
 
 @pytest.mark.neo4j
@@ -236,11 +238,11 @@ class TestModuleAndBranch:
 @pytest.mark.neo4j
 class TestToDict:
     def test_to_dict_fields(self, graph_core):
-        task = core.create_task("proj", "Task", body="Body", plan="Plan")
+        task = core.create_task("proj", "Task", description="Desc", plan="Plan")
         d = task.to_dict()
         assert d["number"] == 1
-        assert d["description"] == "Task"
-        assert d["body"] == "Body"
+        assert d["title"] == "Task"
+        assert d["description"] == "Desc"
         assert d["plan"] == "Plan"
         assert d["status"] == "todo"
         assert "mtime" in d
@@ -266,7 +268,7 @@ class TestUpdatedAtSorting:
     def test_updated_at_changes_on_update(self, graph_core):
         core.create_task("proj", "Task")
         task_before = core.get_task("proj", 1)
-        core.update_task("proj", 1, description="Updated")
+        core.update_task("proj", 1, title="Updated")
         task_after = core.get_task("proj", 1)
         # updated_at should be >= before (might be same if very fast)
         assert task_after.updated_at >= task_before.updated_at
@@ -313,14 +315,14 @@ class TestNormalizationIntegration:
         core.create_task("test_proj", "Task via underscore")
         task = core.get_task("test-proj", 1)
         assert task is not None
-        assert task.description == "Task via underscore"
+        assert task.title == "Task via underscore"
 
     def test_create_with_hyphen_access_with_underscore(self, graph_core):
         """Creating a task with hyphen should be accessible via underscore."""
         core.create_task("test-proj", "Task via hyphen")
         task = core.get_task("test_proj", 1)
         assert task is not None
-        assert task.description == "Task via hyphen"
+        assert task.title == "Task via hyphen"
 
     def test_list_projects_returns_canonical(self, graph_core):
         """list_projects should return canonical (hyphenated) names."""
@@ -334,13 +336,13 @@ class TestNormalizationIntegration:
         core.create_task("my-proj", "Task 1")
         tasks = core.list_tasks("my_proj")
         assert len(tasks) == 1
-        assert tasks[0].description == "Task 1"
+        assert tasks[0].title == "Task 1"
 
     def test_update_task_with_underscore(self, graph_core):
         """update_task should work with underscore variant."""
         core.create_task("my-proj", "Task")
-        updated = core.update_task("my_proj", 1, description="Updated")
-        assert updated.description == "Updated"
+        updated = core.update_task("my_proj", 1, title="Updated")
+        assert updated.title == "Updated"
 
     def test_delete_task_with_underscore(self, graph_core):
         """delete_task should work with underscore variant."""

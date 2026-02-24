@@ -8,7 +8,7 @@ import sys
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -41,12 +41,12 @@ from .core import (
 from .core import (
     update_task as _update_task,
 )
-from .mcp import get_mcp_http_app
+from .mcp import get_planner_mcp_app, get_reviewer_mcp_app, get_swe_mcp_app
 
 logger = logging.getLogger("ralph-tasks.web")
 
 _BEARER_PREFIX = "bearer "
-_PROTECTED_PATH_PREFIXES = ("/api/", "/mcp/", "/mcp")
+_PROTECTED_PATH_PREFIXES = ("/api/", "/mcp-swe", "/mcp-review", "/mcp-plan")
 
 
 def _get_configured_api_key() -> str:
@@ -79,7 +79,7 @@ def _extract_token_from_headers(headers: dict[bytes, bytes]) -> str | None:
 
 
 class ApiKeyMiddleware:
-    """ASGI middleware that protects /api/* and /mcp/* with an API key.
+    """ASGI middleware that protects /api/* and /mcp-* with an API key.
 
     When RALPH_TASKS_API_KEY env var is set (non-empty after stripping),
     requires ``Authorization: Bearer <key>`` or ``X-API-Key: <key>``
@@ -113,6 +113,38 @@ class ApiKeyMiddleware:
                 status_code=401,
                 content={"detail": "Invalid or missing API key"},
                 headers={"WWW-Authenticate": 'Bearer realm="ralph-tasks"'},
+            )
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
+
+
+class ReviewTypeValidationMiddleware:
+    """ASGI middleware that validates review_type query parameter on /mcp-review.
+
+    Returns HTTP 400 if the ``review_type`` query parameter is missing.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+
+        path: str = scope.get("path", "")
+        if not path.startswith("/mcp-review"):
+            await self.app(scope, receive, send)
+            return
+
+        query_string = scope.get("query_string", b"").decode("ascii", errors="replace")
+        review_type = parse_qs(query_string).get("review_type", [""])[0].strip()
+        if not review_type:
+            response = JSONResponse(
+                status_code=400,
+                content={"detail": "review_type query parameter is required for /mcp-review"},
             )
             await response(scope, receive, send)
             return
@@ -156,22 +188,34 @@ def find_templates_dir() -> Path:
     )
 
 
-_mcp_http_app = get_mcp_http_app()
+_swe_mcp_app = get_swe_mcp_app()
+_reviewer_mcp_app = get_reviewer_mcp_app()
+_planner_mcp_app = get_planner_mcp_app()
 
 
 @asynccontextmanager
 async def lifespan(app):
-    """Run MCP sub-app lifespan to initialize its session manager."""
-    async with _mcp_http_app.router.lifespan_context(_mcp_http_app):
+    """Run MCP sub-app lifespans to initialize their session managers."""
+    async with (
+        _swe_mcp_app.router.lifespan_context(_swe_mcp_app),
+        _reviewer_mcp_app.router.lifespan_context(_reviewer_mcp_app),
+        _planner_mcp_app.router.lifespan_context(_planner_mcp_app),
+    ):
         yield
 
 
 app = FastAPI(title="Task Cloud", lifespan=lifespan)
+# Starlette middleware stack is LIFO: last added runs first.
+# ReviewTypeValidationMiddleware added first, ApiKeyMiddleware second
+# → auth check runs before review_type validation.
+app.add_middleware(ReviewTypeValidationMiddleware)
 app.add_middleware(ApiKeyMiddleware)
 templates = Jinja2Templates(directory=find_templates_dir())
 
-# Mount MCP server under /mcp for streamable-http access
-app.mount("/mcp", _mcp_http_app, name="mcp")
+# Mount role-based MCP endpoints
+app.mount("/mcp-swe", _swe_mcp_app, name="mcp-swe")
+app.mount("/mcp-review", _reviewer_mcp_app, name="mcp-review")
+app.mount("/mcp-plan", _planner_mcp_app, name="mcp-plan")
 
 
 @app.get("/health")
@@ -181,17 +225,17 @@ async def health():
 
 
 class TaskUpdate(BaseModel):
-    body: str | None = None
+    description: str | None = None
     plan: str | None = None
     report: str | None = None
     blocks: str | None = None
-    description: str | None = None
+    title: str | None = None
     status: str | None = None
 
 
 class TaskCreate(BaseModel):
-    description: str
-    body: str | None = ""
+    title: str
+    description: str | None = ""
     plan: str | None = ""
 
 
@@ -281,7 +325,7 @@ async def get_monthly_tasks(month: str):
                 {
                     "project": project_name,
                     "number": t.number,
-                    "description": t.description,
+                    "title": t.title,
                     "status": t.status,
                     "date": date_value[:16],
                 }
@@ -331,7 +375,7 @@ async def get_task_endpoint(project: str, number: int):
 
 @app.post("/api/task/{project}/{number}")
 async def update_task_endpoint(project: str, number: int, data: TaskUpdate):
-    """Update task body, plan, or description."""
+    """Update task fields."""
     fields = data.model_dump(exclude_none=True)
     if not fields:
         task = get_task(project, number)
@@ -376,11 +420,11 @@ async def update_project_endpoint(name: str, data: ProjectUpdate):
 @app.post("/api/task/{project}")
 async def create_task_endpoint(project: str, data: TaskCreate):
     """Create a new task."""
-    if not data.description.strip():
-        raise HTTPException(status_code=400, detail="Task description is required")
+    if not data.title.strip():
+        raise HTTPException(status_code=400, detail="Task title is required")
 
     task = _create_task(
-        project, data.description.strip(), body=data.body or "", plan=data.plan or ""
+        project, data.title.strip(), description=data.description or "", plan=data.plan or ""
     )
     return {"ok": True, "number": task.number, "task": task.to_dict()}
 

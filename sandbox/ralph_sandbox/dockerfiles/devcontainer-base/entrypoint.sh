@@ -178,12 +178,12 @@ if command -v claude &> /dev/null; then
     MCP_LIST=$(claude mcp list 2>/dev/null || echo "")
 
     # Add ralph-tasks MCP server if not already configured
-    # Prefer network (streamable-http) if container is running, fallback to local stdio
+    # Uses network transport (streamable-http) via the SWE role endpoint
     # Container names are resolvable via ai-sbx-proxy-internal network (requires NO_PROXY bypass)
     if echo "$MCP_LIST" | grep -q "ralph-tasks"; then
         true  # already configured
     else
-        RALPH_TASKS_URL="http://ai-sbx-ralph-tasks:8000/mcp"
+        RALPH_TASKS_URL="http://ai-sbx-ralph-tasks:8000/mcp-swe"
         MCP_ADD_ARGS=(claude mcp add -s user --transport http)
         if [ -n "${RALPH_TASKS_API_KEY:-}" ]; then
             MCP_ADD_ARGS+=(--header "Authorization: Bearer ${RALPH_TASKS_API_KEY}")
@@ -191,15 +191,10 @@ if command -v claude &> /dev/null; then
         MCP_ADD_ARGS+=(ralph-tasks "$RALPH_TASKS_URL")
         if curl -sf --max-time 3 "http://ai-sbx-ralph-tasks:8000/health" >/dev/null 2>&1; then
             "${MCP_ADD_ARGS[@]}" 2>/dev/null && \
-                echo "Added ralph-tasks MCP server (streamable-http via ai-sbx-ralph-tasks:8000)" || true
-        elif [ -n "${RALPH_TASKS_API_KEY:-}" ]; then
-            echo "Warning: ralph-tasks container not reachable and RALPH_TASKS_API_KEY is set."
-            echo "  Stdio fallback skipped — auth requires the network transport."
-            echo "  Ensure ai-sbx-ralph-tasks is running for MCP access."
+                echo "Added ralph-tasks MCP server (streamable-http via ai-sbx-ralph-tasks:8000/mcp-swe)" || true
         else
-            echo "Warning: ralph-tasks container not reachable, falling back to local stdio"
-            claude mcp add -s user ralph-tasks -- ralph-tasks serve 2>/dev/null && \
-                echo "Added ralph-tasks MCP server (stdio fallback)" || true
+            echo "Warning: ralph-tasks container not reachable."
+            echo "  Ensure ai-sbx-ralph-tasks is running for MCP access."
         fi
     fi
 

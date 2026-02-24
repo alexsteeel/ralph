@@ -118,8 +118,8 @@ class TestRecursiveStructures:
 
         subs = crud.list_subtasks(neo4j_session, "proj", 1)
         assert len(subs) == 2
-        descriptions = {s["description"] for s in subs}
-        assert descriptions == {"Sub A", "Sub B"}
+        titles = {s["title"] for s in subs}
+        assert titles == {"Sub A", "Sub B"}
 
 
 @pytest.mark.neo4j
@@ -234,4 +234,4 @@ class TestSchemaIdempotency:
 
         task = crud.get_task(neo4j_session, "proj", 1)
         assert task is not None
-        assert task["description"] == "Task 1"
+        assert task["title"] == "Task 1"

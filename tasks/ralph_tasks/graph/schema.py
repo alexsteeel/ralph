@@ -26,10 +26,7 @@ INDEXES = [
 
 # Full-text indexes for search
 FULLTEXT_INDEXES = [
-    (
-        "CREATE FULLTEXT INDEX task_description_ft IF NOT EXISTS "
-        "FOR (t:Task) ON EACH [t.description]"
-    ),
+    ("CREATE FULLTEXT INDEX task_title_ft IF NOT EXISTS FOR (t:Task) ON EACH [t.title]"),
     ("CREATE FULLTEXT INDEX finding_text_ft IF NOT EXISTS FOR (f:Finding) ON EACH [f.text]"),
 ]
 

@@ -1156,7 +1156,7 @@
                 <div class="modal-dates" id="modal-dates"></div>
             </div>
             <div class="modal-tabs">
-                <button class="modal-tab active" data-tab="body">Description</button>
+                <button class="modal-tab active" data-tab="description">Description</button>
                 <button class="modal-tab" data-tab="plan">Plan</button>
                 <button class="modal-tab" data-tab="report">Report</button>
                 <button class="modal-tab" data-tab="blocks">Blocks</button>
@@ -1225,9 +1225,9 @@
         const btnFullscreen = document.getElementById('btn-fullscreen');
         const tabs = document.querySelectorAll('.modal-tab');
 
-        let currentData = { body: '', plan: '', report: '', blocks: '' };
-        let currentTab = 'body';
-        let currentTask = { project: '', number: 0, description: '', started: '', completed: '', status: 'todo', module: '' };
+        let currentData = { description: '', plan: '', report: '', blocks: '' };
+        let currentTab = 'description';
+        let currentTask = { project: '', number: 0, title: '', started: '', completed: '', status: 'todo', module: '' };
         let isEditing = false;
         let originalDescription = '';
         let taskCards = [];
@@ -1292,13 +1292,13 @@
             }
         }
 
-        function openModal(title, body, plan, report, blocks, project, number, started, completed, status, module, initialTab = 'body') {
-            const match = title.match(/^#(\d+)\s+(.*)$/);
-            const description = match ? match[2] : title;
-            originalDescription = description;
+        function openModal(titleText, description, plan, report, blocks, project, number, started, completed, status, module, initialTab = 'description') {
+            const match = titleText.match(/^#(\d+)\s+(.*)$/);
+            const taskTitle = match ? match[2] : titleText;
+            originalDescription = taskTitle;
 
-            modalTitle.textContent = title;
-            modalTitleInput.value = description;
+            modalTitle.textContent = titleText;
+            modalTitleInput.value = taskTitle;
 
             // Display module badge
             if (module) {
@@ -1321,8 +1321,8 @@
                 modalDates.appendChild(completeSpan);
             }
 
-            currentData = { body: body || '', plan: plan || '', report: report || '', blocks: blocks || '' };
-            currentTask = { project, number, description, started: started || '', completed: completed || '', status: status || 'todo', module: module || '' };
+            currentData = { description: description || '', plan: plan || '', report: report || '', blocks: blocks || '' };
+            currentTask = { project, number, title: taskTitle, started: started || '', completed: completed || '', status: status || 'todo', module: module || '' };
             currentTab = initialTab;
             isEditing = false;
             showTab(initialTab);
@@ -1337,14 +1337,15 @@
             if (isEditing) {
                 modalEditor.value = currentData[tab];
             } else {
-                const labels = { body: 'description', plan: 'plan', report: 'report', blocks: 'blocks' };
+                const labels = { description: 'description', plan: 'plan', report: 'report', blocks: 'blocks' };
                 const content = currentData[tab] || `_No ${labels[tab]}_`;
+                // XSS risk accepted: internal-only tool, task content written only by authenticated API users
                 modalBody.innerHTML = marked.parse(content);
             }
 
-            // Show attachments section only in body tab
+            // Show attachments section only in description tab
             const attachmentsSection = document.getElementById('attachments-section');
-            if (tab === 'body') {
+            if (tab === 'description') {
                 attachmentsSection.classList.add('visible');
                 loadAttachments();
             } else {
@@ -1381,7 +1382,7 @@
 
             if (editing) {
                 modalEditor.value = currentData[currentTab];
-                modalTitleInput.value = currentTask.description;
+                modalTitleInput.value = currentTask.title;
                 modalEditor.focus();
             }
         }
@@ -1391,7 +1392,7 @@
         }
 
         function cancelEdit() {
-            modalTitleInput.value = currentTask.description;
+            modalTitleInput.value = currentTask.title;
             setEditMode(false);
             showTab(currentTab);
         }
@@ -1400,19 +1401,19 @@
             // Save current editor content to currentData
             currentData[currentTab] = modalEditor.value;
 
-            const newDescription = modalTitleInput.value.trim();
+            const newTitle = modalTitleInput.value.trim();
 
             // Send all fields - this ensures changes across multiple tabs are saved
             const payload = {
-                body: currentData.body,
+                description: currentData.description,
                 plan: currentData.plan,
                 report: currentData.report,
                 blocks: currentData.blocks
             };
 
-            // Add description if changed
-            if (newDescription && newDescription !== currentTask.description) {
-                payload.description = newDescription;
+            // Add title if changed
+            if (newTitle && newTitle !== currentTask.title) {
+                payload.title = newTitle;
             }
 
             try {
@@ -1422,24 +1423,24 @@
                     body: JSON.stringify(payload)
                 });
                 if (res.ok) {
-                    if (payload.description) {
-                        currentTask.description = newDescription;
-                        modalTitle.textContent = `#${currentTask.number} ${newDescription}`;
+                    if (payload.title) {
+                        currentTask.title = newTitle;
+                        modalTitle.textContent = `#${currentTask.number} ${newTitle}`;
                     }
                     // Update card data attributes for all fields
                     const card = document.querySelector(`.card[data-number="${currentTask.number}"], .kanban-card[data-number="${currentTask.number}"]`);
                     if (card) {
-                        card.dataset.body = currentData.body;
+                        card.dataset.description = currentData.description;
                         card.dataset.plan = currentData.plan;
                         card.dataset.report = currentData.report;
                         card.dataset.blocks = currentData.blocks;
-                        if (payload.description) {
-                            card.dataset.title = `#${currentTask.number} ${newDescription}`;
+                        if (payload.title) {
+                            card.dataset.title = `#${currentTask.number} ${newTitle}`;
                             const titleEl = card.querySelector('.card-title, .kanban-card-title');
                             if (titleEl) {
                                 titleEl.textContent = card.classList.contains('kanban-card')
-                                    ? newDescription
-                                    : `#${currentTask.number} ${newDescription}`;
+                                    ? newTitle
+                                    : `#${currentTask.number} ${newTitle}`;
                             }
                         }
                     }
@@ -1490,7 +1491,7 @@
             // Check if editor content differs from saved data
             if (modalEditor.value !== currentData[currentTab]) return true;
             // Check if title was changed
-            if (modalTitleInput.value.trim() !== currentTask.description) return true;
+            if (modalTitleInput.value.trim() !== currentTask.title) return true;
             return false;
         }
 
@@ -1523,7 +1524,7 @@
         });
 
         // Initialize task cards array for navigation
-        taskCards = Array.from(document.querySelectorAll('.card[data-body], .kanban-card[data-body]'));
+        taskCards = Array.from(document.querySelectorAll('.card[data-description], .kanban-card[data-description]'));
 
         taskCards.forEach((card, index) => {
             card.addEventListener('click', e => {
@@ -1534,10 +1535,10 @@
         });
 
         function openModalFromCard(card, keepTab = false) {
-            const tabToKeep = keepTab ? currentTab : 'body';
+            const tabToKeep = keepTab ? currentTab : 'description';
             openModal(
                 card.dataset.title,
-                card.dataset.body,
+                card.dataset.description,
                 card.dataset.plan,
                 card.dataset.report,
                 card.dataset.blocks || '',
@@ -1583,18 +1584,18 @@
                 if (res.ok) {
                     const data = await res.json();
                     currentData = {
-                        body: data.body || '',
+                        description: data.description || '',
                         plan: data.plan || '',
                         report: data.report || '',
                         blocks: data.blocks || ''
                     };
-                    currentTask.description = data.description;
+                    currentTask.title = data.title;
                     currentTask.status = data.status;
                     currentTask.started = data.started || '';
                     currentTask.completed = data.completed || '';
                     currentTask.module = data.module || '';
                     // Update UI
-                    modalTitle.textContent = `#${currentTask.number} ${currentTask.description}`;
+                    modalTitle.textContent = `#${currentTask.number} ${currentTask.title}`;
                     if (currentTask.module) {
                         modalModule.textContent = currentTask.module;
                         modalModule.style.display = 'inline-block';
@@ -1618,11 +1619,11 @@
                     // Update card data
                     const card = taskCards[currentTaskIndex];
                     if (card) {
-                        card.dataset.body = currentData.body;
+                        card.dataset.description = currentData.description;
                         card.dataset.plan = currentData.plan;
                         card.dataset.report = currentData.report;
                         card.dataset.blocks = currentData.blocks;
-                        card.dataset.title = `#${currentTask.number} ${currentTask.description}`;
+                        card.dataset.title = `#${currentTask.number} ${currentTask.title}`;
                         card.dataset.status = currentTask.status;
                     }
                 }
@@ -1691,8 +1692,8 @@
                         method: 'POST',
                         headers: authHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify({
-                            description: name,
-                            body: createBodyInput.value
+                            title: name,
+                            description: createBodyInput.value
                         })
                     });
                 }
@@ -1725,7 +1726,7 @@
         // Search functionality
         function filterTasks(query, updateUrl = true) {
             const q = query.toLowerCase().trim();
-            const cards = document.querySelectorAll('.card[data-body], .kanban-card[data-body]');
+            const cards = document.querySelectorAll('.card[data-description], .kanban-card[data-description]');
 
             cards.forEach(card => {
                 if (!q) {
@@ -1735,13 +1736,13 @@
 
                 const number = card.dataset.number || '';
                 const title = card.dataset.title || '';
-                const body = card.dataset.body || '';
+                const description = card.dataset.description || '';
                 const plan = card.dataset.plan || '';
                 const report = card.dataset.report || '';
                 const blocks = card.dataset.blocks || '';
                 const module = card.dataset.module || '';
 
-                const searchText = `#${number} ${title} ${body} ${plan} ${report} ${blocks} ${module}`.toLowerCase();
+                const searchText = `#${number} ${title} ${description} ${plan} ${report} ${blocks} ${module}`.toLowerCase();
 
                 if (searchText.includes(q)) {
                     card.classList.remove('hidden');
@@ -1751,7 +1752,7 @@
             });
 
             // Update taskCards array for navigation
-            taskCards = Array.from(document.querySelectorAll('.card[data-body]:not(.hidden), .kanban-card[data-body]:not(.hidden)'));
+            taskCards = Array.from(document.querySelectorAll('.card[data-description]:not(.hidden), .kanban-card[data-description]:not(.hidden)'));
 
             // Save search to URL
             if (updateUrl) {

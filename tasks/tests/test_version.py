@@ -25,19 +25,6 @@ def test_version_fallback():
     importlib.reload(ralph_tasks)
 
 
-def test_mcp_version_flag():
-    """ralph-tasks --version prints version and exits 0."""
-    result = subprocess.run(
-        [sys.executable, "-m", "ralph_tasks.mcp", "--version"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0
-    assert "ralph-tasks " in result.stdout
-    assert result.stderr == "", f"Unexpected stderr: {result.stderr}"
-
-
 def test_web_version_flag():
     """ralph-tasks-web --version prints version and exits 0."""
     result = subprocess.run(

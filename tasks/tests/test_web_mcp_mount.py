@@ -1,4 +1,4 @@
-"""Tests for combined ASGI app: web UI + MCP mount + health endpoint."""
+"""Tests for combined ASGI app: web UI + MCP role mounts + health endpoint."""
 
 import io
 from unittest.mock import patch
@@ -35,33 +35,102 @@ class TestHealthEndpoint:
         assert data["service"] == "ralph-tasks"
 
 
-class TestMcpMount:
-    """Tests for MCP mount at /mcp."""
+class TestMcpRoleMounts:
+    """Tests for role-based MCP mounts at /mcp-swe, /mcp-review, /mcp-plan."""
 
-    def test_mcp_mount_exists(self):
-        """The app should have /mcp in its routes."""
+    def test_all_role_mounts_exist(self):
+        """The app should have /mcp-swe, /mcp-review, /mcp-plan in its routes."""
         mount_paths = [
             r.path for r in app.routes if hasattr(r, "path") and not hasattr(r, "methods")
         ]
-        assert "/mcp" in mount_paths
+        assert "/mcp-swe" in mount_paths
+        assert "/mcp-review" in mount_paths
+        assert "/mcp-plan" in mount_paths
 
-    def test_mcp_route_name(self):
-        """The MCP mount should be named 'mcp'."""
+    def test_old_mcp_mount_removed(self):
+        """The old /mcp mount should no longer exist."""
+        mount_paths = [
+            r.path for r in app.routes if hasattr(r, "path") and not hasattr(r, "methods")
+        ]
+        assert "/mcp" not in mount_paths
+
+    def test_swe_mount_name(self):
         for route in app.routes:
-            if hasattr(route, "path") and route.path == "/mcp":
-                assert route.name == "mcp"
+            if hasattr(route, "path") and route.path == "/mcp-swe":
+                assert route.name == "mcp-swe"
                 break
         else:
-            pytest.fail("/mcp route not found")
+            pytest.fail("/mcp-swe route not found")
 
-    def test_mcp_mount_has_app(self):
-        """The MCP mount should contain a sub-application."""
+    def test_reviewer_mount_name(self):
         for route in app.routes:
-            if hasattr(route, "path") and route.path == "/mcp":
-                assert hasattr(route, "app")
+            if hasattr(route, "path") and route.path == "/mcp-review":
+                assert route.name == "mcp-review"
                 break
         else:
-            pytest.fail("/mcp route not found")
+            pytest.fail("/mcp-review route not found")
+
+    def test_planner_mount_name(self):
+        for route in app.routes:
+            if hasattr(route, "path") and route.path == "/mcp-plan":
+                assert route.name == "mcp-plan"
+                break
+        else:
+            pytest.fail("/mcp-plan route not found")
+
+    def test_each_mount_has_app(self):
+        for path in ("/mcp-swe", "/mcp-review", "/mcp-plan"):
+            for route in app.routes:
+                if hasattr(route, "path") and route.path == path:
+                    assert hasattr(route, "app"), f"{path} mount has no app"
+                    break
+            else:
+                pytest.fail(f"{path} route not found")
+
+
+class TestMcpRoleApps:
+    """Tests for get_*_mcp_app() factory functions."""
+
+    def test_swe_app_returns_starlette(self):
+        from ralph_tasks.mcp import get_swe_mcp_app
+
+        assert isinstance(get_swe_mcp_app(), Starlette)
+
+    def test_reviewer_app_returns_starlette(self):
+        from ralph_tasks.mcp import get_reviewer_mcp_app
+
+        assert isinstance(get_reviewer_mcp_app(), Starlette)
+
+    def test_planner_app_returns_starlette(self):
+        from ralph_tasks.mcp import get_planner_mcp_app
+
+        assert isinstance(get_planner_mcp_app(), Starlette)
+
+
+class TestReviewTypeValidation:
+    """Tests for ReviewTypeValidationMiddleware."""
+
+    def test_mcp_review_requires_review_type(self, client):
+        """Requests to /mcp-review without review_type should get 400."""
+        response = client.get("/mcp-review/")
+        assert response.status_code == 400
+        assert "review_type" in response.json()["detail"]
+
+    def test_mcp_review_with_review_type_passes(self, client):
+        """Requests to /mcp-review with review_type should pass through."""
+        response = client.get("/mcp-review/?review_type=code-review")
+        # Should not be 400 (the actual response depends on the MCP app)
+        assert response.status_code != 400
+
+    def test_mcp_swe_no_review_type_needed(self, client):
+        """Requests to /mcp-swe should not require review_type."""
+        response = client.get("/mcp-swe/")
+        assert response.status_code != 400
+
+    def test_mcp_plan_no_review_type_needed(self, client):
+        """Requests to /mcp-plan should not require review_type."""
+        response = client.get("/mcp-plan/")
+        assert response.status_code != 400
 
 
 class TestWebRoutesUnchanged:
@@ -108,28 +177,10 @@ class TestKanbanRedirect:
         assert response.headers["location"] == "/kanban/my-project?filter=todo"
 
 
-class TestGetMcpHttpApp:
-    """Tests for mcp.get_mcp_http_app()."""
-
-    def test_returns_starlette_app(self):
-        from ralph_tasks.mcp import get_mcp_http_app
-
-        http_app = get_mcp_http_app()
-        assert isinstance(http_app, Starlette)
-
-    def test_has_root_route(self):
-        from ralph_tasks.mcp import get_mcp_http_app
-
-        http_app = get_mcp_http_app()
-        paths = [r.path for r in http_app.routes if hasattr(r, "path")]
-        assert "/" in paths
-
-
 class TestWebMainConfig:
     """Tests for web.main() configuration via environment variables."""
 
     def test_main_uses_default_host_port(self, monkeypatch):
-        """main() should default to 127.0.0.1:8000 when env vars are unset."""
         monkeypatch.delenv("RALPH_TASKS_HOST", raising=False)
         monkeypatch.delenv("RALPH_TASKS_PORT", raising=False)
 
@@ -148,7 +199,6 @@ class TestWebMainConfig:
         assert captured["port"] == 8000
 
     def test_main_uses_custom_host_port(self, monkeypatch):
-        """main() should read host/port from RALPH_TASKS_HOST/PORT env vars."""
         monkeypatch.setenv("RALPH_TASKS_HOST", "0.0.0.0")
         monkeypatch.setenv("RALPH_TASKS_PORT", "3000")
 
@@ -194,7 +244,6 @@ class TestExtractToken:
         assert _extract_token_from_headers({}) is None
 
     def test_binary_auth_header_returns_none(self):
-        """Non-ASCII authorization header should not crash."""
         from ralph_tasks.web import _extract_token_from_headers
 
         headers = {b"authorization": b"\xff\xfe"}
@@ -205,28 +254,24 @@ class TestApiKeyAuth:
     """Tests for API key authentication middleware."""
 
     def test_health_no_auth_required(self, auth_client):
-        """Health endpoint should work without authentication."""
         response = auth_client.get("/health")
         assert response.status_code == 200
 
     def test_api_401_without_key(self, auth_client):
-        """/api/* should return 401 when no key is provided."""
         with patch("ralph_tasks.web.get_task", return_value=None):
             response = auth_client.get("/api/task/test/1")
         assert response.status_code == 401
         assert "API key" in response.json()["detail"]
 
     def test_api_bearer_token(self, auth_client):
-        """Authorization: Bearer <key> should grant access."""
         with patch("ralph_tasks.web.get_task", return_value=None):
             response = auth_client.get(
                 "/api/task/test/1",
                 headers={"Authorization": f"Bearer {TEST_API_KEY}"},
             )
-        assert response.status_code == 404  # 404 because task doesn't exist, not 401
+        assert response.status_code == 404
 
     def test_api_x_api_key_header(self, auth_client):
-        """X-API-Key header should grant access."""
         with patch("ralph_tasks.web.get_task", return_value=None):
             response = auth_client.get(
                 "/api/task/test/1",
@@ -235,7 +280,6 @@ class TestApiKeyAuth:
         assert response.status_code == 404
 
     def test_api_wrong_key(self, auth_client):
-        """Wrong API key should return 401."""
         with patch("ralph_tasks.web.get_task", return_value=None):
             response = auth_client.get(
                 "/api/task/test/1",
@@ -243,19 +287,27 @@ class TestApiKeyAuth:
             )
         assert response.status_code == 401
 
-    def test_mcp_401_without_key(self, auth_client):
-        """/mcp/* should return 401 when auth is enabled but no key provided."""
-        response = auth_client.get("/mcp/")
+    def test_mcp_swe_401_without_key(self, auth_client):
+        """/mcp-swe should return 401 when auth is enabled but no key provided."""
+        response = auth_client.get("/mcp-swe/")
+        assert response.status_code == 401
+
+    def test_mcp_review_401_without_key(self, auth_client):
+        """/mcp-review should return 401 when auth is enabled but no key provided."""
+        response = auth_client.get("/mcp-review/?review_type=code")
+        assert response.status_code == 401
+
+    def test_mcp_plan_401_without_key(self, auth_client):
+        """/mcp-plan should return 401 when auth is enabled but no key provided."""
+        response = auth_client.get("/mcp-plan/")
         assert response.status_code == 401
 
     def test_no_auth_when_env_not_set(self, client):
-        """When RALPH_TASKS_API_KEY is not set, all requests pass through."""
         with patch("ralph_tasks.web.get_task", return_value=None):
             response = client.get("/api/task/test/1")
-        assert response.status_code == 404  # Not 401
+        assert response.status_code == 404
 
     def test_web_pages_no_auth(self, auth_client):
-        """Root page and kanban pages should not require auth."""
         with patch("ralph_tasks.web.list_projects", return_value=[]):
             response = auth_client.get("/")
         assert response.status_code == 200
@@ -265,13 +317,12 @@ class TestApiKeyAuth:
         assert response.status_code == 200
 
     def test_bearer_case_insensitive(self, auth_client):
-        """Bearer scheme should be case-insensitive per RFC 7235."""
         with patch("ralph_tasks.web.get_task", return_value=None):
             response = auth_client.get(
                 "/api/task/test/1",
                 headers={"Authorization": f"bearer {TEST_API_KEY}"},
             )
-        assert response.status_code == 404  # Authenticated, task not found
+        assert response.status_code == 404
 
         with patch("ralph_tasks.web.get_task", return_value=None):
             response = auth_client.get(
@@ -281,24 +332,22 @@ class TestApiKeyAuth:
         assert response.status_code == 404
 
     def test_whitespace_only_key_is_disabled(self, monkeypatch):
-        """Whitespace-only RALPH_TASKS_API_KEY should be treated as unset."""
         monkeypatch.setenv("RALPH_TASKS_API_KEY", "   ")
         client = TestClient(app, raise_server_exceptions=False)
         with patch("ralph_tasks.web.get_task", return_value=None):
             response = client.get("/api/task/test/1")
-        assert response.status_code == 404  # Not 401 -- auth disabled
+        assert response.status_code == 404
 
-    def test_mcp_root_path_protected(self, auth_client):
-        """/mcp (without trailing slash) should also be protected."""
-        response = auth_client.get("/mcp")
-        assert response.status_code in (401, 307)  # 401 if no redirect, 307 if redirect
+    def test_mcp_swe_root_path_protected(self, auth_client):
+        """/mcp-swe (without trailing slash) should also be protected."""
+        response = auth_client.get("/mcp-swe")
+        assert response.status_code in (401, 307)
 
 
 class TestUploadSizeLimit:
     """Tests for file upload size limit."""
 
     def test_small_file_accepted(self, client, monkeypatch):
-        """A small file should be accepted."""
         monkeypatch.setenv("RALPH_TASKS_MAX_UPLOAD_MB", "1")
         small_content = b"Hello, world!"
 
@@ -309,7 +358,7 @@ class TestUploadSizeLimit:
                 return_value={"name": "test.txt", "size": len(small_content)},
             ),
         ):
-            mock_get.return_value = True  # Task exists
+            mock_get.return_value = True
             response = client.post(
                 "/api/task/test/1/attachments",
                 files={"file": ("test.txt", io.BytesIO(small_content), "text/plain")},
@@ -317,9 +366,7 @@ class TestUploadSizeLimit:
         assert response.status_code == 200
 
     def test_large_file_rejected_413(self, client, monkeypatch):
-        """A file exceeding the limit should return 413."""
         monkeypatch.setenv("RALPH_TASKS_MAX_UPLOAD_MB", "1")
-        # Create content slightly over 1MB
         large_content = b"x" * (1024 * 1024 + 1)
 
         with patch("ralph_tasks.web.get_task") as mock_get:
@@ -332,22 +379,105 @@ class TestUploadSizeLimit:
         assert "too large" in response.json()["detail"]
 
     def test_default_limit_50mb(self, monkeypatch):
-        """Default max upload should be 50 MB."""
         monkeypatch.delenv("RALPH_TASKS_MAX_UPLOAD_MB", raising=False)
         from ralph_tasks.web import _get_max_upload_bytes
 
         assert _get_max_upload_bytes() == 50 * 1024 * 1024
 
     def test_invalid_max_upload_env_falls_back(self, monkeypatch):
-        """Non-integer RALPH_TASKS_MAX_UPLOAD_MB should fall back to 50 MB."""
         monkeypatch.setenv("RALPH_TASKS_MAX_UPLOAD_MB", "not-a-number")
         from ralph_tasks.web import _get_max_upload_bytes
 
         assert _get_max_upload_bytes() == 50 * 1024 * 1024
 
     def test_negative_max_upload_env_falls_back(self, monkeypatch):
-        """Negative RALPH_TASKS_MAX_UPLOAD_MB should fall back to 50 MB."""
         monkeypatch.setenv("RALPH_TASKS_MAX_UPLOAD_MB", "-10")
         from ralph_tasks.web import _get_max_upload_bytes
 
         assert _get_max_upload_bytes() == 50 * 1024 * 1024
+
+
+class TestTaskApiFieldNames:
+    """Tests for renamed field names in task API."""
+
+    def test_create_task_uses_title_field(self, client):
+        """POST /api/task/{project} should accept 'title' field."""
+        with patch("ralph_tasks.web._create_task") as mock_create:
+            from ralph_tasks.core import Task
+
+            mock_create.return_value = Task(number=1, title="Test Task")
+            response = client.post(
+                "/api/task/test-project",
+                json={"title": "Test Task"},
+            )
+        assert response.status_code == 200
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][1] == "Test Task"
+
+    def test_create_task_rejects_empty_title(self, client):
+        """POST /api/task/{project} should reject empty title."""
+        response = client.post(
+            "/api/task/test-project",
+            json={"title": "   "},
+        )
+        assert response.status_code == 400
+
+    def test_update_task_accepts_title_field(self, client):
+        """POST /api/task/{project}/{number} should accept 'title' field."""
+        from ralph_tasks.core import Task
+
+        updated = Task(number=1, title="Updated Title")
+        with patch("ralph_tasks.web._update_task", return_value=updated):
+            response = client.post(
+                "/api/task/test/1",
+                json={"title": "Updated Title"},
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task"]["title"] == "Updated Title"
+
+    def test_update_task_accepts_description_field(self, client):
+        """POST /api/task/{project}/{number} should accept 'description' field."""
+        from ralph_tasks.core import Task
+
+        updated = Task(number=1, title="Task", description="New desc")
+        with patch("ralph_tasks.web._update_task", return_value=updated):
+            response = client.post(
+                "/api/task/test/1",
+                json={"description": "New desc"},
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task"]["description"] == "New desc"
+
+    def test_get_task_returns_new_field_names(self, client):
+        """GET /api/task/{project}/{number} should return title/description."""
+        from ralph_tasks.core import Task
+
+        task = Task(number=1, title="My Task", description="Details here")
+        with patch("ralph_tasks.web.get_task", return_value=task):
+            response = client.get("/api/task/test/1")
+        assert response.status_code == 200
+        data = response.json()
+        assert "title" in data
+        assert "description" in data
+        assert data["title"] == "My Task"
+        assert data["description"] == "Details here"
+
+    def test_monthly_api_returns_title(self, client):
+        """GET /api/monthly/{month} should return 'title' field for tasks."""
+        from ralph_tasks.core import Task
+
+        tasks = [
+            Task(number=1, title="Task 1", status="done", completed="2026-02-15 10:00"),
+        ]
+        with (
+            patch("ralph_tasks.web.list_projects", return_value=["test"]),
+            patch("ralph_tasks.web.list_tasks", return_value=tasks),
+        ):
+            response = client.get("/api/monthly/2026-02")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["tasks"]) == 1
+        assert data["tasks"][0]["title"] == "Task 1"

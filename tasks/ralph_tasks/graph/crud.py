@@ -172,7 +172,7 @@ def rename_project(
 def create_task(
     session: Session,
     project_name: str,
-    description: str,
+    title: str,
     **fields: Any,
 ) -> dict:
     """Create a Task under a Project.
@@ -182,7 +182,7 @@ def create_task(
     """
     now = _now()
     props: dict[str, Any] = {
-        "description": description,
+        "title": title,
         "status": fields.get("status", "todo"),
         "created_at": now,
         "updated_at": now,
@@ -425,13 +425,13 @@ def create_subtask(
     session: Session,
     project_name: str,
     parent_task_number: int,
-    description: str,
+    title: str,
     **fields: Any,
 ) -> dict:
     """Create a subtask linked to a parent task via HAS_SUBTASK. Atomic numbering."""
     now = _now()
     props: dict[str, Any] = {
-        "description": description,
+        "title": title,
         "status": fields.get("status", "todo"),
         "created_at": now,
         "updated_at": now,
