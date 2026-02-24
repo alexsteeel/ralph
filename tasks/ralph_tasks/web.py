@@ -340,9 +340,9 @@ async def projects_cloud(request: Request):
     monthly_list = sorted(monthly_stats.items(), reverse=True)[:6]
 
     return templates.TemplateResponse(
+        request,
         "projects.html",
         {
-            "request": request,
             "projects": projects,
             "summary": summary,
             "project_count": len(projects),
@@ -403,9 +403,9 @@ async def kanban_board(request: Request, name: str):
         logger.warning("Failed to load review counts for kanban %r", name, exc_info=True)
         review_counts = {}
     return templates.TemplateResponse(
+        request,
         "kanban.html",
         {
-            "request": request,
             "project": name,
             "board": board,
             "review_counts": review_counts,
@@ -712,9 +712,9 @@ async def dashboard(request: Request):
         logger.warning("Failed to load projects for dashboard", exc_info=True)
         projects = []
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
         {
-            "request": request,
             "projects": projects,
             "api_key": _get_configured_api_key(),
         },
