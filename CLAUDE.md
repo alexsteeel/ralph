@@ -93,13 +93,14 @@ uv run ruff format --check .
 
 Devcontainer uses Docker-in-Docker (DinD). The DinD service is named `docker` in docker-compose. Containers started via `docker run` inside devcontainer run inside DinD. Their mapped ports are accessible from devcontainer by hostname `docker`.
 
-Shared infrastructure services (Neo4j, MinIO, ralph-tasks) run on the host Docker in the `ai-sbx-proxy-internal` network. Devcontainer is also connected to this network and reaches them by container name:
+Shared infrastructure services (Neo4j, MinIO, PostgreSQL, ralph-tasks) run on the host Docker in the `ai-sbx-proxy-internal` network. Devcontainer is also connected to this network and reaches them by container name:
 
 ```
 bolt://ai-sbx-neo4j:7687       # Neo4j Bolt
 http://ai-sbx-neo4j:7474       # Neo4j HTTP
 http://ai-sbx-minio:9000       # MinIO S3 API (internal port)
 http://ai-sbx-minio:9001       # MinIO Console (internal port)
+postgresql://ai-sbx-postgres:5432  # PostgreSQL
 http://ai-sbx-ralph-tasks:8000 # ralph-tasks web UI + MCP
 docker:<port>                   # DinD mapped ports (containers started inside devcontainer)
 ```
@@ -151,6 +152,7 @@ Environment variables for ralph-tasks container:
 - `RALPH_TASKS_HOST` / `RALPH_TASKS_PORT` — bind address (default: `127.0.0.1:8000`)
 - `RALPH_TASKS_API_KEY` — API key for `/api/*` and `/mcp-*` authentication (empty = disabled)
 - `RALPH_TASKS_MAX_UPLOAD_MB` — maximum upload size in MB (default: `50`)
+- `POSTGRES_URI` — PostgreSQL connection URI (default: `postgresql://ralph:ralph-ai-sbx-password@ai-sbx-postgres:5432/ralph`)
 
 ## Development Notes
 
@@ -199,6 +201,12 @@ Object keys follow the pattern `{project}/{NNN}/{filename}`. The storage module 
 
 MinIO tests use `@pytest.mark.minio` marker and auto-skip when MinIO is unreachable. The test conftest tries `ai-sbx-minio:9000` first (devcontainer via proxy-internal network), then `docker:59000`, then `localhost:59000`, then `localhost:19000` (test docker-compose). Override via `MINIO_TEST_ENDPOINT` env var. Test credentials: `MINIO_TEST_ACCESS_KEY`/`MINIO_TEST_SECRET_KEY` (defaults: `minioadmin`/`minioadmin`).
 
+### PostgreSQL tests: auto-skip when unavailable
+
+> **Note:** conftest.py marker/fixtures not yet implemented — planned in task #82 (Database module). The conventions below describe the target design.
+
+PostgreSQL tests use `@pytest.mark.postgres` marker and auto-skip when the database is unreachable. The test conftest tries `ai-sbx-postgres:5432` first (devcontainer via proxy-internal network), then `docker:55432`, then `localhost:55432`, then `localhost:15432` (test docker-compose). Override via `POSTGRES_TEST_URI` env var. Test credentials: `POSTGRES_TEST_USER`/`POSTGRES_TEST_PASSWORD` (defaults: `ralph_test`/`testpassword123`).
+
 ### Neo4j credentials: NEO4J_AUTH vs NEO4J_USER/NEO4J_PASSWORD
 
 Neo4j Docker image uses `NEO4J_AUTH=neo4j/password` (slash-separated) format. The Python Neo4j driver (`GraphClient`) expects **separate** `NEO4J_USER` and `NEO4J_PASSWORD` variables. When configuring docker-compose services:
@@ -213,3 +221,17 @@ NEO4J_PASSWORD: testpassword123
 ```
 
 Do NOT pass `NEO4J_AUTH` to ralph-tasks — it won't be parsed correctly.
+
+### PostgreSQL credentials: POSTGRES_URI
+
+PostgreSQL uses a single `POSTGRES_URI` connection string for the application. The Docker image expects separate `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` environment variables.
+
+```yaml
+# PostgreSQL container (image format):
+POSTGRES_USER: ralph
+POSTGRES_PASSWORD: ralph-ai-sbx-password
+POSTGRES_DB: ralph
+
+# ralph-tasks app container (URI format):
+POSTGRES_URI: postgresql://ralph:ralph-ai-sbx-password@ai-sbx-postgres:5432/ralph
+```

@@ -24,3 +24,15 @@ services:
     command: server /data --console-address ":9001"
     tmpfs:
       - /data
+
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: postgres-test
+    ports:
+      - "127.0.0.1:15432:5432"
+    environment:
+      POSTGRES_USER: "ralph_test"
+      POSTGRES_PASSWORD: "testpassword123"
+      POSTGRES_DB: "ralph_test"
+    tmpfs:
+      - /var/lib/postgresql/data

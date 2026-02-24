@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- **sandbox: PostgreSQL container in shared infrastructure** (#81)
+  - Production: `postgres:16-alpine`, container `ai-sbx-postgres`, port `127.0.0.1:55432:5432`, volume `ai-sbx-postgres-data`, network `ai-sbx-proxy-internal`
+  - Test: `postgres-test`, port `15432:5432`, tmpfs for ephemeral data, credentials `ralph_test/testpassword123`
+  - `POSTGRES_URI` env var for ralph-tasks service
+  - `ai-sbx-postgres` added to NO_PROXY in both `docker-compose.base.yaml` files
+  - CLAUDE.md updated with PostgreSQL endpoints, env vars, test conventions, credentials note
 - **tasks: UI — review sub-tabs in kanban board** (#14)
   - Kanban card badge showing open review findings count (`N open`)
   - Modal Review tab with dynamic sub-tabs per review_type (code-review, security, etc.)

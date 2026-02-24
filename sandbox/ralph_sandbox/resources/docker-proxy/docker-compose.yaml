@@ -87,11 +87,38 @@ services:
       MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-minioadmin}"
       RALPH_TASKS_HOST: "0.0.0.0"
       RALPH_TASKS_API_KEY: "${RALPH_TASKS_API_KEY:-}"
+      POSTGRES_URI: "postgresql://${POSTGRES_USER:-ralph}:${POSTGRES_PASSWORD:-ralph-ai-sbx-password}@ai-sbx-postgres:5432/${POSTGRES_DB:-ralph}"
     networks:
       - ai-sbx-proxy-internal
     depends_on:
-      - neo4j
-      - minio
+      neo4j:
+        condition: service_started
+      minio:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
+  # PostgreSQL for session/task execution metrics (observability)
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-sbx-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - ai-sbx-postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-ralph}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-ralph-ai-sbx-password}"
+      POSTGRES_DB: "${POSTGRES_DB:-ralph}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ralph} -d ${POSTGRES_DB:-ralph}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - ai-sbx-proxy-internal
 
   # Neo4j graph database for task management
   neo4j:
@@ -133,4 +160,7 @@ volumes:
     driver: local
   ai-sbx-neo4j-logs:
     name: ai-sbx-neo4j-logs
+    driver: local
+  ai-sbx-postgres-data:
+    name: ai-sbx-postgres-data
     driver: local
