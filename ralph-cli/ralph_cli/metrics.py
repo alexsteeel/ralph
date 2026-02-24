@@ -59,7 +59,7 @@ def submit_session_metrics(
         payload["model"] = model
     if claude_session_id is not None:
         payload["claude_session_id"] = claude_session_id
-    if task_executions:
+    if task_executions is not None:
         payload["task_executions"] = task_executions
 
     url = f"{api_url.rstrip('/')}/api/metrics/sessions"

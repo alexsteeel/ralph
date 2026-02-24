@@ -130,6 +130,8 @@ def run_plan(
     console.print(f"Tasks: [green]{', '.join(str(t) for t in tasks)}[/green]")
     console.print(f"Working directory: [green]{working_dir}[/green]")
 
+    start_time = datetime.now()
+
     # Check if on protected branch
     current_branch = get_current_branch(working_dir)
     if current_branch in ("master", "main"):
@@ -139,11 +141,19 @@ def run_plan(
         ):
             console.print("[yellow]Pipeline stopped.[/yellow]")
             session_log.append(f"Pipeline stopped: user declined to continue on {current_branch}")
+            submit_session_metrics(
+                command_type="plan",
+                project=project,
+                started_at=start_time,
+                finished_at=datetime.now(),
+                exit_code=1,
+                error_type="USER_CANCELLED",
+            )
             return 1
 
     completed = []
     failed = []
-    start_time = datetime.now()
+    pipeline_cancelled = False
 
     for task_num in tasks:
         task_ref = f"{project}#{task_num}"
@@ -175,7 +185,8 @@ def run_plan(
                 session_log.append(
                     "Pipeline stopped: uncommitted changes not confirmed for deletion"
                 )
-                return 1
+                pipeline_cancelled = True
+                break
 
             # Cleanup confirmed
             cleaned = cleanup_working_dir(working_dir)
@@ -247,12 +258,14 @@ def run_plan(
     console.print(f"Failed: [red]{len(failed)}[/red]")
 
     # Submit metrics (minimal — no cost/tokens in TUI mode)
+    exit_code = 1 if (failed or pipeline_cancelled) else 0
     submit_session_metrics(
         command_type="plan",
         project=project,
         started_at=start_time,
         finished_at=datetime.now(),
-        exit_code=0 if not failed else 1,
+        exit_code=exit_code,
+        error_type="USER_CANCELLED" if pipeline_cancelled else None,
     )
 
-    return 0 if not failed else 1
+    return exit_code

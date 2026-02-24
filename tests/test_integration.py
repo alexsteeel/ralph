@@ -54,7 +54,7 @@ class TestEntrypoint:
     def test_registers_ralph_tasks_mcp(self):
         content = self.ENTRYPOINT.read_text()
         assert "ralph-tasks" in content
-        assert "ralph-tasks serve" in content
+        assert "mcp-swe" in content
 
     def test_no_old_md_task_mcp_registration(self):
         content = self.ENTRYPOINT.read_text()
@@ -73,7 +73,7 @@ class TestCodexConfig:
     def test_uses_ralph_tasks_mcp(self):
         content = self.CONFIG.read_text()
         assert "[mcp_servers.ralph-tasks]" in content
-        assert 'url = "http://ai-sbx-ralph-tasks:8000/mcp"' in content
+        assert 'url = "http://ai-sbx-ralph-tasks:8000/mcp-swe"' in content
 
     def test_no_old_md_task_mcp(self):
         content = self.CONFIG.read_text()

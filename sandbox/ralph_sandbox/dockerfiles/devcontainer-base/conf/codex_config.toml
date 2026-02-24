@@ -16,7 +16,7 @@ model_provider = "openai"
 model_reasoning_effort = "medium"
 
 [mcp_servers.ralph-tasks]
-url = "http://ai-sbx-ralph-tasks:8000/mcp"
+url = "http://ai-sbx-ralph-tasks:8000/mcp-swe"
 
 [mcp_servers.playwright]
 command = "playwright-mcp"

@@ -224,8 +224,7 @@ def run_implement(
         project_stats=project_stats,
     )
 
-    # Submit metrics (token counts and task_executions not yet available —
-    # requires per-task accumulation from StreamMonitor, planned for #86)
+    # Submit metrics (token counts and task_executions not yet available)
     submit_session_metrics(
         command_type="implement",
         project=project,

@@ -64,6 +64,10 @@
   - Updated PostgreSQL tests section (removed "not yet implemented" note, added pg_database fixture docs)
   - ralph-cli config section for metrics submission (RALPH_TASKS_API_URL, RALPH_TASKS_API_KEY)
 
+### Fixed
+- **tests: update entrypoint test for HTTP MCP transport** (#47)
+  - `test_registers_ralph_tasks_mcp` now checks for `mcp-swe` instead of `ralph-tasks serve` (stdio removed in #13)
+
 ### Changed
 - **tasks: MCP role endpoints — swe + reviewer + planner with distinct tool sets** (#13)
   - Split monolithic `/mcp` endpoint into 3 role-based HTTP endpoints:
