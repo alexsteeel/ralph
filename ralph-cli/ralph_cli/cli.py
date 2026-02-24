@@ -115,6 +115,17 @@ def implement(
 
 
 @app.command()
+def config(
+    key: str | None = typer.Argument(None, help="Config key to display"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+):
+    """Show current configuration."""
+    from .commands.config_cmd import run_config
+
+    raise typer.Exit(run_config(key, json_output))
+
+
+@app.command()
 def health(
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Show detailed output"),
 ):

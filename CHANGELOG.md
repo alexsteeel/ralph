@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added
+- **ralph-cli: `ralph config` command for viewing current configuration** (#29)
+  - Displays all Settings fields grouped by section (Telegram, Recovery, Timeouts, Review, Codex, Metrics, Paths)
+  - `--json` flag for machine-readable JSON output
+  - Single key lookup: `ralph config <key>` prints just that value
+  - Combined: `ralph config <key> --json` for programmatic single-value access
+  - Automatic secret masking (tokens, API keys) — shows `****xyz` (last 3 chars)
+  - 13 new tests covering all modes and masking
 - **tasks: `search_tasks` MCP tool for keyword search across tasks** (#73)
   - New `search_tasks` tool in all MCP role endpoints (swe, reviewer, planner)
   - Full-text search across task title, module, section content, and finding text
