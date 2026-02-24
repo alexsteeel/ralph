@@ -143,6 +143,14 @@ class TestWebRoutesUnchanged:
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
 
+    def test_projects_page_has_dashboard_link(self, client):
+        """Projects page should have a link to the dashboard."""
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            response = client.get("/")
+        assert response.status_code == 200
+        assert 'data-testid="dashboard-link"' in response.text
+        assert 'href="/dashboard"' in response.text
+
     def test_settings_api_removed(self, client):
         """Settings endpoint was removed along with backup functionality."""
         response = client.get("/api/settings")

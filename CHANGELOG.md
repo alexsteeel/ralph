@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added
+- **tasks: metrics dashboard UI** (#84)
+  - Full Chart.js dashboard at `/dashboard` with dark theme
+  - Summary cards: Total Cost, Sessions, Success Rate, Avg Cost/Task, Total Tokens, Failed
+  - Charts: Cost timeline (line), Tokens timeline (line), Cost by Command Type (doughnut), Cost by Model (bar)
+  - Period filter (7d/30d/90d/All) with project dropdown
+  - `Promise.allSettled` for graceful partial degradation when API endpoints fail
+  - Dashboard link in projects page header
+  - `data-testid` attributes on all interactive elements
+  - 9 new dashboard tests + 1 projects page navigation test
 - **tasks: metrics REST API endpoints** (#83)
   - `POST /api/metrics/sessions` — accept session metrics with optional task_executions
   - `GET /api/metrics/summary` — aggregated metrics (cost, tokens, sessions) with period/project filters

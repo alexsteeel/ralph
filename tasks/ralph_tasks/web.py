@@ -706,9 +706,18 @@ async def get_metrics_breakdown(
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Serve the metrics dashboard page."""
+    try:
+        projects = list_projects()
+    except Exception:
+        logger.warning("Failed to load projects for dashboard", exc_info=True)
+        projects = []
     return templates.TemplateResponse(
         "dashboard.html",
-        {"request": request},
+        {
+            "request": request,
+            "projects": projects,
+            "api_key": _get_configured_api_key(),
+        },
     )
 
 

@@ -399,15 +399,90 @@ class TestDashboardRoute:
 
     def test_returns_html(self, client):
         """Dashboard route returns HTML page."""
-        res = client.get("/dashboard")
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            res = client.get("/dashboard")
         assert res.status_code == 200
         assert "text/html" in res.headers["content-type"]
         assert "Dashboard" in res.text
 
     def test_no_auth_required(self, auth_client):
         """Dashboard is accessible without API key (not under /api/)."""
-        res = auth_client.get("/dashboard")
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            res = auth_client.get("/dashboard")
         assert res.status_code == 200
+
+    def test_includes_chartjs_cdn(self, client):
+        """Dashboard page includes Chart.js CDN script."""
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            res = client.get("/dashboard")
+        assert "chart.js" in res.text
+
+    def test_includes_project_dropdown(self, client):
+        """Dashboard renders project names in the dropdown."""
+        with patch("ralph_tasks.web.list_projects", return_value=["alpha", "beta"]):
+            res = client.get("/dashboard")
+        assert res.status_code == 200
+        assert "alpha" in res.text
+        assert "beta" in res.text
+        assert 'data-testid="project-select"' in res.text
+
+    def test_includes_summary_cards(self, client):
+        """Dashboard renders all six summary cards."""
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            res = client.get("/dashboard")
+        for card_id in [
+            "card-total-cost",
+            "card-sessions",
+            "card-success-rate",
+            "card-avg-cost",
+            "card-tokens",
+            "card-failed",
+        ]:
+            assert f'data-testid="{card_id}"' in res.text
+
+    def test_includes_chart_containers(self, client):
+        """Dashboard renders all four chart containers."""
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            res = client.get("/dashboard")
+        for chart_id in [
+            "chart-cost-timeline",
+            "chart-tokens-timeline",
+            "chart-cost-by-command",
+            "chart-cost-by-model",
+        ]:
+            assert f'data-testid="{chart_id}"' in res.text
+
+    def test_includes_period_buttons(self, client):
+        """Dashboard renders period filter buttons."""
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            res = client.get("/dashboard")
+        for period in ["7d", "30d", "90d", "all"]:
+            assert f'data-testid="period-{period}"' in res.text
+
+    def test_includes_back_link(self, client):
+        """Dashboard has a link back to projects."""
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            res = client.get("/dashboard")
+        assert 'data-testid="back-link"' in res.text
+        assert 'href="/"' in res.text
+
+    def test_passes_api_key_to_template(self, monkeypatch):
+        """Dashboard passes api_key for authHeaders() to work."""
+        monkeypatch.setenv("RALPH_TASKS_API_KEY", "dashboard-test-key")
+        # Can't use the shared `client` fixture: env var must be set before TestClient is created.
+        client = TestClient(app, raise_server_exceptions=False)
+        with patch("ralph_tasks.web.list_projects", return_value=[]):
+            res = client.get("/dashboard")
+        assert res.status_code == 200
+        assert "dashboard-test-key" in res.text
+
+    def test_graceful_degradation_when_neo4j_down(self, client):
+        """Dashboard renders with empty project dropdown when Neo4j is unavailable."""
+        with patch("ralph_tasks.web.list_projects", side_effect=ConnectionError("Neo4j down")):
+            res = client.get("/dashboard")
+        assert res.status_code == 200
+        assert "Dashboard" in res.text
+        assert 'data-testid="project-select"' in res.text
 
 
 # =============================================================================
