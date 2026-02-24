@@ -256,17 +256,9 @@ def init_global(
 
     # Build Docker images first
     console.print("\n[bold]Step 1: Building Docker images...[/bold]")
-    from ralph_sandbox.commands.image import _image_exists
+    from ralph_sandbox.commands.image import REQUIRED_IMAGES, _image_exists
 
-    # Check if images already exist
-    required_images = [
-        "ai-agents-sandbox/tinyproxy-base",
-        "ai-agents-sandbox/tinyproxy",
-        "ai-agents-sandbox/docker-dind",
-        "ai-agents-sandbox/devcontainer",
-    ]
-
-    missing_images = [img for img in required_images if not _image_exists(img, DEFAULT_IMAGE_TAG)]
+    missing_images = [img for img in REQUIRED_IMAGES if not _image_exists(img, DEFAULT_IMAGE_TAG)]
 
     if missing_images:
         console.print(f"[yellow]Found {len(missing_images)} missing images. Building...[/yellow]")

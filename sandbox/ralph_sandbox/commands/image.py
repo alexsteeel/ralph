@@ -18,6 +18,7 @@ REQUIRED_IMAGES = [
     "ai-agents-sandbox/tinyproxy",
     "ai-agents-sandbox/docker-dind",
     "ai-agents-sandbox/devcontainer",
+    "ai-agents-sandbox/ralph-tasks",
 ]
 
 # Image build order and directory mapping (relative to images dir)
@@ -27,6 +28,11 @@ BUILD_ORDER = [
     ("tinyproxy-registry", "tinyproxy-registry"),
     ("docker-dind", "docker-dind"),
     ("devcontainer", "devcontainer-base"),
+]
+
+# Images built from monorepo root (subdir relative to monorepo root, not dockerfiles dir)
+MONOREPO_IMAGES = [
+    ("ralph-tasks", "tasks"),
 ]
 
 
@@ -79,12 +85,9 @@ def build(
         console.print("Please ensure ai-sbx is properly installed or run from repository.")
         sys.exit(1)
 
-    # Build images directly using Python
-    images_to_build = BUILD_ORDER if all else BUILD_ORDER[:5]  # First 5 are required
-
-    # Count images that need building
+    # Phase 1: Collect dockerfiles-dir images that need building
     images_to_process = []
-    for image_name, image_subdir in images_to_build:
+    for image_name, image_subdir in BUILD_ORDER:
         full_path = images_dir / image_subdir
         if not full_path.exists():
             console.print(f"[yellow]Skipping {image_name} - directory not found[/yellow]")
@@ -99,7 +102,17 @@ def build(
 
         images_to_process.append((image_name, full_path, full_image_name))
 
-    if not images_to_process:
+    # Phase 2: Collect monorepo images that need building (paths resolved later,
+    # after monorepo_root is found — deferred so no-op builds work outside monorepo)
+    monorepo_images_pending = []
+    for image_name, subdir in MONOREPO_IMAGES:
+        full_image_name = f"ai-agents-sandbox/{image_name}"
+        if not force and _image_exists(full_image_name, tag):
+            console.print(f"[dim]Skipping {image_name} - already exists[/dim]")
+            continue
+        monorepo_images_pending.append((image_name, subdir, full_image_name))
+
+    if not images_to_process and not monorepo_images_pending:
         console.print("[green]All images are already built. Use --force to rebuild.[/green]")
         return
 
@@ -110,6 +123,14 @@ def build(
         console.print("[red]Could not find monorepo root (uv.lock marker).[/red]")
         console.print("Please run from within the ralph monorepo.")
         sys.exit(1)
+
+    # Resolve monorepo image paths and append to the build list
+    for image_name, subdir, full_image_name in monorepo_images_pending:
+        full_path = monorepo_root / subdir
+        if not full_path.exists():
+            console.print(f"[red]Error: {image_name} directory not found: {full_path}[/red]")
+            sys.exit(1)
+        images_to_process.append((image_name, full_path, full_image_name))
 
     total_images = len(images_to_process)
     console.print(
@@ -169,6 +190,10 @@ def build(
                     sys.exit(1)
 
     console.print("\n[green]✓ All images built successfully![/green]")
+
+    # Hint: restart ralph-tasks container if its image was rebuilt
+    if any(name == "ralph-tasks" for name, _, _ in images_to_process):
+        _print_ralph_tasks_restart_hint(console)
 
 
 @image.command(name="list")
@@ -235,6 +260,32 @@ def verify(ctx: click.Context, tag: str) -> None:
         console.print("\n[red]Some images are missing.[/red]")
         console.print("Run: [cyan]ai-sbx image build[/cyan]")
         sys.exit(1)
+
+
+def _print_ralph_tasks_restart_hint(console: Console) -> None:
+    """Print a hint to restart the ralph-tasks container.
+
+    Should be called only after ralph-tasks image has been rebuilt.
+    Checks whether the container is running (by name); if so, prompts restart.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "ai-sbx-ralph-tasks" in result.stdout:
+            console.print(
+                "\n[yellow]Note:[/yellow] ralph-tasks container is running with the old image."
+            )
+            console.print(
+                "  Restart: [cyan]docker compose"
+                " -f ~/.ai-sbx/docker-proxy/docker-compose.yaml"
+                " up -d ralph-tasks[/cyan]"
+            )
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        pass  # Best-effort hint — docker may not be available
 
 
 def _find_dockerfiles_dir() -> Path | None:

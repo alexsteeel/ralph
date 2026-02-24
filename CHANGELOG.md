@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- **sandbox: build ralph-tasks image in `ai-sbx image build`** (#76)
+  - New `MONOREPO_IMAGES` constant for images built from monorepo root (not dockerfiles dir)
+  - Two-phase build collection: dockerfiles-dir images + monorepo images
+  - `ralph-tasks` added to `REQUIRED_IMAGES` (shown in `list`, `verify`)
+  - Post-build hint to restart `ai-sbx-ralph-tasks` container if running with old image
+  - Deduplicated `required_images` in `init.py` — now imports `REQUIRED_IMAGES` from `image.py`
+  - Unified `RALPH_TASKS_TAG` → `IMAGE_TAG` in docker-proxy docker-compose.yaml
+  - 9 new tests for monorepo images build and restart hint
 - **ralph-cli: fire-and-forget metrics submission + cost tracking fix** (#85)
   - New `ralph_cli/metrics.py` — fire-and-forget HTTP client for `POST /api/metrics/sessions`
   - Settings: `ralph_tasks_api_url`, `ralph_tasks_api_key` in `config.py` (None by default = disabled)

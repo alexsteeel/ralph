@@ -5,7 +5,13 @@ from unittest.mock import Mock, patch
 
 from click.testing import CliRunner
 from ralph_sandbox.cli import cli
-from ralph_sandbox.commands.image import DEFAULT_IMAGE_TAG, REQUIRED_IMAGES, _find_monorepo_root
+from ralph_sandbox.commands.image import (
+    BUILD_ORDER,
+    DEFAULT_IMAGE_TAG,
+    MONOREPO_IMAGES,
+    REQUIRED_IMAGES,
+    _find_monorepo_root,
+)
 
 
 class TestFindMonorepoRoot:
@@ -205,12 +211,8 @@ class TestImageHelpers:
     def test_verify_images_some_missing(self, mock_docker, mock_exists):
         """Test verifying images when some are missing."""
         mock_docker.return_value = True
-        # Return False for tinyproxy to simulate it's missing
-        mock_exists.side_effect = [
-            True,  # devcontainer exists
-            False,  # tinyproxy missing
-            True,  # docker-dind exists
-        ]
+        # Second image is missing; supply len(REQUIRED_IMAGES) entries for the mock
+        mock_exists.side_effect = [True, False] + [True] * (len(REQUIRED_IMAGES) - 2)
 
         runner = CliRunner()
         result = runner.invoke(cli, ["image", "verify"])
@@ -358,7 +360,8 @@ class TestImageVerifyCommand:
     def test_verify_some_missing(self, mock_docker, mock_exists):
         """Test verify when some images are missing."""
         mock_docker.return_value = True
-        mock_exists.side_effect = [True, False, True]  # tinyproxy missing
+        # Need len(REQUIRED_IMAGES) entries with at least one False
+        mock_exists.side_effect = [True, False] + [True] * (len(REQUIRED_IMAGES) - 2)
 
         result = self.runner.invoke(cli, ["image", "verify"])
 
@@ -393,3 +396,322 @@ class TestImageVerifyCommand:
         assert DEFAULT_IMAGE_TAG in result.output
         for call in mock_exists.call_args_list:
             assert call[0][1] == DEFAULT_IMAGE_TAG
+
+
+class TestMonorepoImages:
+    """Test MONOREPO_IMAGES constant and monorepo image build integration."""
+
+    def test_monorepo_images_contains_ralph_tasks(self):
+        """Test that MONOREPO_IMAGES includes ralph-tasks."""
+        names = [name for name, _ in MONOREPO_IMAGES]
+        assert "ralph-tasks" in names
+
+    def test_ralph_tasks_subdir_is_tasks(self):
+        """Test that ralph-tasks uses 'tasks' subdir."""
+        for name, subdir in MONOREPO_IMAGES:
+            if name == "ralph-tasks":
+                assert subdir == "tasks"
+
+    def test_required_images_includes_ralph_tasks(self):
+        """Test that REQUIRED_IMAGES includes ralph-tasks."""
+        assert "ai-agents-sandbox/ralph-tasks" in REQUIRED_IMAGES
+
+    def test_required_images_count(self):
+        """Test total number of required images (4 base + 1 monorepo)."""
+        # REQUIRED_IMAGES excludes tinyproxy-registry (optional build-only image)
+        assert len(REQUIRED_IMAGES) == 5
+        # Every MONOREPO_IMAGES entry should appear in REQUIRED_IMAGES
+        for name, _ in MONOREPO_IMAGES:
+            assert f"ai-agents-sandbox/{name}" in REQUIRED_IMAGES
+
+    @patch("ralph_sandbox.commands.image._print_ralph_tasks_restart_hint")
+    @patch("ralph_sandbox.commands.image._build_image")
+    @patch("ralph_sandbox.commands.image._find_monorepo_root")
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image._find_dockerfiles_dir")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_build_includes_monorepo_images(
+        self,
+        mock_docker,
+        mock_dockerfiles,
+        mock_image_exists,
+        mock_root,
+        mock_build,
+        mock_hint,
+        tmp_path,
+    ):
+        """Test that build processes monorepo images using monorepo_root paths."""
+        mock_docker.return_value = True
+
+        # Set up dockerfiles dir with all BUILD_ORDER subdirs
+        dockerfiles_dir = tmp_path / "dockerfiles"
+        for _, subdir in BUILD_ORDER[:5]:
+            (dockerfiles_dir / subdir).mkdir(parents=True)
+            (dockerfiles_dir / subdir / "Dockerfile").touch()
+        mock_dockerfiles.return_value = dockerfiles_dir
+
+        # Set up monorepo root with tasks/ subdir
+        monorepo_root = tmp_path / "monorepo"
+        monorepo_root.mkdir()
+        tasks_dir = monorepo_root / "tasks"
+        tasks_dir.mkdir()
+        (tasks_dir / "Dockerfile").touch()
+        mock_root.return_value = monorepo_root
+
+        # All images need building
+        mock_image_exists.return_value = False
+        mock_build.return_value = True
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["image", "build", "--force"])
+
+        assert result.exit_code == 0
+
+        # Verify ralph-tasks was built with monorepo_root / "tasks" as build_path
+        build_calls = mock_build.call_args_list
+        ralph_tasks_calls = [c for c in build_calls if c[0][0] == "ai-agents-sandbox/ralph-tasks"]
+        assert len(ralph_tasks_calls) == 1
+        # build_path argument (3rd positional) should be monorepo_root / "tasks"
+        assert ralph_tasks_calls[0][0][2] == tasks_dir
+
+        # Restart hint should be called since ralph-tasks was built
+        mock_hint.assert_called_once()
+
+    @patch("ralph_sandbox.commands.image._build_image")
+    @patch("ralph_sandbox.commands.image._find_monorepo_root")
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image._find_dockerfiles_dir")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_build_skips_existing_monorepo_images(
+        self,
+        mock_docker,
+        mock_dockerfiles,
+        mock_image_exists,
+        mock_root,
+        mock_build,
+        tmp_path,
+    ):
+        """Test that existing monorepo images are skipped without --force."""
+        mock_docker.return_value = True
+
+        dockerfiles_dir = tmp_path / "dockerfiles"
+        for _, subdir in BUILD_ORDER[:5]:
+            (dockerfiles_dir / subdir).mkdir(parents=True)
+            (dockerfiles_dir / subdir / "Dockerfile").touch()
+        mock_dockerfiles.return_value = dockerfiles_dir
+
+        # All images already exist
+        mock_image_exists.return_value = True
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["image", "build"])
+
+        assert result.exit_code == 0
+        assert "already built" in result.output.lower()
+        mock_build.assert_not_called()
+        # Key invariant: monorepo_root is NOT resolved when no images need building
+        mock_root.assert_not_called()
+
+    @patch("ralph_sandbox.commands.image._print_ralph_tasks_restart_hint")
+    @patch("ralph_sandbox.commands.image._build_image")
+    @patch("ralph_sandbox.commands.image._find_monorepo_root")
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image._find_dockerfiles_dir")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_build_only_ralph_tasks_needs_building(
+        self,
+        mock_docker,
+        mock_dockerfiles,
+        mock_image_exists,
+        mock_root,
+        mock_build,
+        mock_hint,
+        tmp_path,
+    ):
+        """Test the key scenario: all dockerfiles-dir images exist, only ralph-tasks missing."""
+        mock_docker.return_value = True
+
+        dockerfiles_dir = tmp_path / "dockerfiles"
+        for _, subdir in BUILD_ORDER[:5]:
+            (dockerfiles_dir / subdir).mkdir(parents=True)
+            (dockerfiles_dir / subdir / "Dockerfile").touch()
+        mock_dockerfiles.return_value = dockerfiles_dir
+
+        monorepo_root = tmp_path / "monorepo"
+        monorepo_root.mkdir()
+        tasks_dir = monorepo_root / "tasks"
+        tasks_dir.mkdir()
+        (tasks_dir / "Dockerfile").touch()
+        mock_root.return_value = monorepo_root
+
+        # Dockerfiles-dir images exist, ralph-tasks does not
+        def image_exists_side_effect(name, tag):
+            return name != "ai-agents-sandbox/ralph-tasks"
+
+        mock_image_exists.side_effect = image_exists_side_effect
+        mock_build.return_value = True
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["image", "build"])
+
+        assert result.exit_code == 0
+        # Only ralph-tasks should be built
+        assert mock_build.call_count == 1
+        assert mock_build.call_args[0][0] == "ai-agents-sandbox/ralph-tasks"
+        mock_hint.assert_called_once()
+
+    @patch("ralph_sandbox.commands.image._find_monorepo_root")
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image._find_dockerfiles_dir")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_build_fails_monorepo_root_when_only_ralph_tasks_pending(
+        self,
+        mock_docker,
+        mock_dockerfiles,
+        mock_image_exists,
+        mock_root,
+        tmp_path,
+    ):
+        """Test monorepo_root failure when only ralph-tasks needs building."""
+        mock_docker.return_value = True
+
+        dockerfiles_dir = tmp_path / "dockerfiles"
+        for _, subdir in BUILD_ORDER[:5]:
+            (dockerfiles_dir / subdir).mkdir(parents=True)
+            (dockerfiles_dir / subdir / "Dockerfile").touch()
+        mock_dockerfiles.return_value = dockerfiles_dir
+
+        # Dockerfiles-dir images exist, ralph-tasks does not
+        def image_exists_side_effect(name, tag):
+            return name != "ai-agents-sandbox/ralph-tasks"
+
+        mock_image_exists.side_effect = image_exists_side_effect
+        mock_root.return_value = None
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["image", "build"])
+
+        assert result.exit_code != 0
+        assert "monorepo root" in result.output.lower()
+
+    @patch("ralph_sandbox.commands.image._build_image")
+    @patch("ralph_sandbox.commands.image._find_monorepo_root")
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image._find_dockerfiles_dir")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_build_fails_when_monorepo_subdir_missing(
+        self,
+        mock_docker,
+        mock_dockerfiles,
+        mock_image_exists,
+        mock_root,
+        mock_build,
+        tmp_path,
+    ):
+        """Test that build fails when monorepo subdir (tasks/) is missing."""
+        mock_docker.return_value = True
+
+        dockerfiles_dir = tmp_path / "dockerfiles"
+        for _, subdir in BUILD_ORDER[:5]:
+            (dockerfiles_dir / subdir).mkdir(parents=True)
+            (dockerfiles_dir / subdir / "Dockerfile").touch()
+        mock_dockerfiles.return_value = dockerfiles_dir
+
+        # Monorepo root exists but WITHOUT tasks/ subdir
+        monorepo_root = tmp_path / "monorepo"
+        monorepo_root.mkdir()
+        mock_root.return_value = monorepo_root
+
+        mock_image_exists.return_value = False
+        mock_build.return_value = True
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["image", "build", "--force"])
+
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+    @patch("ralph_sandbox.commands.image._print_ralph_tasks_restart_hint")
+    @patch("ralph_sandbox.commands.image._build_image")
+    @patch("ralph_sandbox.commands.image._find_monorepo_root")
+    @patch("ralph_sandbox.commands.image._image_exists")
+    @patch("ralph_sandbox.commands.image._find_dockerfiles_dir")
+    @patch("ralph_sandbox.commands.image.is_docker_running")
+    def test_restart_hint_not_shown_when_only_dockerfiles_images_built(
+        self,
+        mock_docker,
+        mock_dockerfiles,
+        mock_image_exists,
+        mock_root,
+        mock_build,
+        mock_hint,
+        tmp_path,
+    ):
+        """Test that restart hint is NOT shown when ralph-tasks was not rebuilt."""
+        mock_docker.return_value = True
+
+        dockerfiles_dir = tmp_path / "dockerfiles"
+        for _, subdir in BUILD_ORDER[:5]:
+            (dockerfiles_dir / subdir).mkdir(parents=True)
+            (dockerfiles_dir / subdir / "Dockerfile").touch()
+        mock_dockerfiles.return_value = dockerfiles_dir
+
+        monorepo_root = tmp_path / "monorepo"
+        monorepo_root.mkdir()
+        tasks_dir = monorepo_root / "tasks"
+        tasks_dir.mkdir()
+        (tasks_dir / "Dockerfile").touch()
+        mock_root.return_value = monorepo_root
+
+        # Only dockerfiles-dir images need building, ralph-tasks already exists
+        def image_exists_side_effect(name, tag):
+            return name == "ai-agents-sandbox/ralph-tasks"
+
+        mock_image_exists.side_effect = image_exists_side_effect
+        mock_build.return_value = True
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["image", "build"])
+
+        assert result.exit_code == 0
+        mock_hint.assert_not_called()
+
+
+class TestRalphTasksRestartHint:
+    """Test _print_ralph_tasks_restart_hint."""
+
+    @patch("ralph_sandbox.commands.image.subprocess.run")
+    def test_hint_shown_when_container_running(self, mock_run):
+        """Test that restart hint is shown when ai-sbx-ralph-tasks is running."""
+        from ralph_sandbox.commands.image import _print_ralph_tasks_restart_hint
+
+        mock_run.return_value = Mock(stdout="ai-sbx-ralph-tasks\nai-sbx-neo4j\n", returncode=0)
+        console = Mock()
+        _print_ralph_tasks_restart_hint(console)
+
+        assert console.print.call_count == 2
+        # First call should mention "old image"
+        first_msg = console.print.call_args_list[0][0][0]
+        assert "old image" in first_msg
+
+    @patch("ralph_sandbox.commands.image.subprocess.run")
+    def test_hint_not_shown_when_container_not_running(self, mock_run):
+        """Test that no hint is shown when container is not running."""
+        from ralph_sandbox.commands.image import _print_ralph_tasks_restart_hint
+
+        mock_run.return_value = Mock(stdout="ai-sbx-neo4j\n", returncode=0)
+        console = Mock()
+        _print_ralph_tasks_restart_hint(console)
+
+        console.print.assert_not_called()
+
+    @patch("ralph_sandbox.commands.image.subprocess.run")
+    def test_hint_handles_docker_not_found(self, mock_run):
+        """Test that hint gracefully handles docker binary not found."""
+        from ralph_sandbox.commands.image import _print_ralph_tasks_restart_hint
+
+        mock_run.side_effect = FileNotFoundError("docker not found")
+        console = Mock()
+        _print_ralph_tasks_restart_hint(console)
+
+        console.print.assert_not_called()
