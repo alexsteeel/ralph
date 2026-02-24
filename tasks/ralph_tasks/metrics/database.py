@@ -344,6 +344,8 @@ def get_timeline(period: str = "30d", metric: str = "cost", project: str | None 
 
     Args:
         period: Time window — '7d', '30d', '90d', or 'all'.
+            Note: the REST API endpoint restricts this to '7d', '30d', '90d'
+            (excludes 'all') via Query parameter validation.
         metric: What to aggregate — 'cost', 'tokens', or 'sessions'.
         project: Optional project filter.
 

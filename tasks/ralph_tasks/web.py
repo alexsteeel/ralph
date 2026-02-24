@@ -6,15 +6,16 @@ import logging
 import os
 import sys
 from collections import defaultdict
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, quote
 
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import __version__, storage
@@ -255,6 +256,39 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     description: str | None = None
+
+
+# ---------- Metrics API models ----------
+
+
+class TaskExecutionCreate(BaseModel):
+    task_ref: str = Field(min_length=1)
+    cost_usd: float = Field(default=0, ge=0)
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    duration_seconds: int = Field(default=0, ge=0)
+    exit_code: int | None = None
+    error_type: str | None = None
+    git_branch: str | None = None
+    files_changed: int | None = Field(default=None, ge=0)
+    recovery_attempts: int = Field(default=0, ge=0)
+
+
+class SessionCreate(BaseModel):
+    command_type: str
+    project: str
+    model: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None
+    total_cost_usd: float = Field(default=0, ge=0)
+    total_input_tokens: int = Field(default=0, ge=0)
+    total_output_tokens: int = Field(default=0, ge=0)
+    total_cache_read: int = Field(default=0, ge=0)
+    total_tool_calls: int = Field(default=0, ge=0)
+    exit_code: int | None = None
+    error_type: str | None = None
+    claude_session_id: str | None = None
+    task_executions: list[TaskExecutionCreate] = []
 
 
 _STATUS_DATE_FIELD = {
@@ -592,6 +626,90 @@ async def delete_attachment_endpoint(project: str, number: int, filename: str):
     if not found:
         raise HTTPException(status_code=404, detail="Attachment not found")
     return {"ok": True}
+
+
+# =============================================================================
+# Metrics API
+# =============================================================================
+
+
+@contextmanager
+def _metrics_call(operation: str):
+    try:
+        yield
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("Metrics: %s failed", operation, exc_info=True)
+        raise HTTPException(status_code=503, detail="Metrics service unavailable") from exc
+
+
+def _to_naive_utc(dt: datetime | None) -> datetime | None:
+    """Convert offset-aware datetime to naive UTC for TIMESTAMP columns."""
+    if dt is None or dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+@app.post("/api/metrics/sessions")
+async def create_metrics_session(data: SessionCreate):
+    with _metrics_call("create_session"):
+        from .metrics.database import create_session
+
+        payload = data.model_dump()
+        payload["started_at"] = _to_naive_utc(payload["started_at"])
+        payload["finished_at"] = _to_naive_utc(payload.get("finished_at"))
+        session_id = create_session(payload)
+    return {"ok": True, "session_id": session_id}
+
+
+@app.get("/api/metrics/summary")
+async def get_metrics_summary(
+    period: str = Query("30d", pattern=r"^(7d|30d|90d|all)$"),
+    project: str | None = Query(None),
+):
+    with _metrics_call("get_summary"):
+        from .metrics.database import get_summary
+
+        result = get_summary(period=period, project=project)
+    return result
+
+
+@app.get("/api/metrics/timeline")
+async def get_metrics_timeline(
+    period: str = Query("30d", pattern=r"^(7d|30d|90d)$"),
+    metric: str = Query("cost", pattern=r"^(cost|tokens)$"),
+    project: str | None = Query(None),
+):
+    with _metrics_call("get_timeline"):
+        from .metrics.database import get_timeline
+
+        result = get_timeline(period=period, metric=metric, project=project)
+    return result
+
+
+@app.get("/api/metrics/breakdown")
+async def get_metrics_breakdown(
+    period: str = Query("30d", pattern=r"^(7d|30d|90d|all)$"),
+    group_by: str = Query("command_type", pattern=r"^(model|command_type)$"),
+    project: str | None = Query(None),
+):
+    with _metrics_call("get_breakdown"):
+        from .metrics.database import get_breakdown
+
+        result = get_breakdown(period=period, group_by=group_by, project=project)
+    return result
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Serve the metrics dashboard page."""
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {"request": request},
+    )
 
 
 def main():

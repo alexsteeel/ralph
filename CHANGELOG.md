@@ -3,6 +3,17 @@
 ## [Unreleased]
 
 ### Added
+- **tasks: metrics REST API endpoints** (#83)
+  - `POST /api/metrics/sessions` — accept session metrics with optional task_executions
+  - `GET /api/metrics/summary` — aggregated metrics (cost, tokens, sessions) with period/project filters
+  - `GET /api/metrics/timeline` — time-series data grouped by day (cost/tokens)
+  - `GET /api/metrics/breakdown` — breakdown by model or command_type
+  - `GET /dashboard` — placeholder page (full UI in #84)
+  - Pydantic models: `SessionCreate`, `TaskExecutionCreate` for input validation
+  - Query parameter validation via FastAPI `Query(pattern=...)` with 422 on invalid values
+  - Graceful 503 when PostgreSQL unavailable (lazy import + catch-all exception handler)
+  - All `/api/metrics/*` endpoints protected by existing `ApiKeyMiddleware`
+  - 30 tests covering CRUD, validation, auth, 503 degradation
 - **tasks: PostgreSQL metrics database module** (#82)
   - New `ralph_tasks/metrics/database.py` — lazy-singleton `ThreadedConnectionPool`, schema management, CRUD
   - Tables: `sessions` (cost, tokens, tool_calls, exit_code) + `task_executions` (per-task metrics, FK cascade)
