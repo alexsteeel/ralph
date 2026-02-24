@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- **tasks: PostgreSQL metrics database module** (#82)
+  - New `ralph_tasks/metrics/database.py` — lazy-singleton `ThreadedConnectionPool`, schema management, CRUD
+  - Tables: `sessions` (cost, tokens, tool_calls, exit_code) + `task_executions` (per-task metrics, FK cascade)
+  - CRUD: `create_session()` with nested task_executions, `get_summary()`, `get_timeline()`, `get_breakdown()`
+  - Period filtering (7d/30d/90d/all) and project filtering across all query functions
+  - Schema init in web.py lifespan (best-effort, graceful degradation)
+  - `@pytest.mark.postgres` marker with auto-skip when PostgreSQL unavailable
+  - `pg_database` fixture with TRUNCATE cleanup per test
+  - 18 integration tests covering schema, CRUD, aggregations, pool management
+  - Dependency: `psycopg2-binary>=2.9`
 - **sandbox: PostgreSQL container in shared infrastructure** (#81)
   - Production: `postgres:16-alpine`, container `ai-sbx-postgres`, port `127.0.0.1:55432:5432`, volume `ai-sbx-postgres-data`, network `ai-sbx-proxy-internal`
   - Test: `postgres-test`, port `15432:5432`, tmpfs for ephemeral data, credentials `ralph_test/testpassword123`

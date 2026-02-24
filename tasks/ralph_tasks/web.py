@@ -197,7 +197,14 @@ _planner_mcp_app = get_planner_mcp_app()
 
 @asynccontextmanager
 async def lifespan(app):
-    """Run MCP sub-app lifespans to initialize their session managers."""
+    """Initialize PostgreSQL metrics schema (best-effort) and MCP sub-app lifespans."""
+    try:
+        from .metrics.database import ensure_schema as ensure_pg_schema
+
+        ensure_pg_schema()
+    except Exception:
+        logger.warning("PostgreSQL metrics schema init failed", exc_info=True)
+
     async with (
         _swe_mcp_app.router.lifespan_context(_swe_mcp_app),
         _reviewer_mcp_app.router.lifespan_context(_reviewer_mcp_app),
