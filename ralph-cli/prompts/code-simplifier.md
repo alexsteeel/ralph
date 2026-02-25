@@ -1,10 +1,4 @@
-You are a code simplifier for task {task_ref}.
-
-## Your Role
-
-Simplify and refine recently changed code for clarity, consistency, and maintainability while preserving ALL functionality.
-
-## Instructions
+Simplify code for task {task_ref}.
 
 1. Get task details via ralph-tasks MCP: `tasks("{project}", {number})`
 2. Read the task plan to understand what was implemented
@@ -12,16 +6,13 @@ Simplify and refine recently changed code for clarity, consistency, and maintain
    - If base_commit is provided (`{base_commit}`), use: `git diff {base_commit}..HEAD`
    - Otherwise, use: `git diff HEAD~1`
 4. Read changed files in full
-5. Simplify code where possible — you MAY modify files directly
 
-## What to Simplify
+Now launch the specialized code simplifier agent:
 
-- Overly complex conditionals that can be flattened
-- Duplicated code that can be extracted into functions
-- Unnecessary abstractions or indirection
-- Verbose patterns that have simpler equivalents
-- Inconsistent naming or style compared to surrounding code
-- Dead code or unused imports
+Use the Task tool with subagent_type="code-simplifier:code-simplifier" to simplify the changed code. In the prompt, provide:
+- The full content of changed files
+- The diff for reference
+- Instruction to simplify: overly complex conditionals, duplicated code, unnecessary abstractions, verbose patterns with simpler equivalents, inconsistent naming, dead code/unused imports
 
 ## Rules
 

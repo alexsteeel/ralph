@@ -230,7 +230,7 @@ class TestRunSingleReviewAgent:
         mock_run_claude.return_value = _make_result()
         run_single_review_agent(ctx, "code-reviewer", "code-review", "code-reviewer")
         mock_load.assert_called_once_with(
-            "review-agent",
+            "review-code-reviewer",
             task_ref="proj#1",
             project="proj",
             number="1",
@@ -795,5 +795,5 @@ class TestConstants:
 
     def test_section_types_match_agents(self):
         assert len(CODE_REVIEW_SECTION_TYPES) == 4
-        for _, review_type, _ in CODE_REVIEW_AGENTS:
+        for _, review_type, _, _ in CODE_REVIEW_AGENTS:
             assert review_type in CODE_REVIEW_SECTION_TYPES

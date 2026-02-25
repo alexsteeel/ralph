@@ -61,15 +61,15 @@ class ReviewChainResult:
     phase_results: dict[str, ReviewPhaseResult] | None = None
 
 
-# Code review agent definitions: (agent_name, review_type, author)
+# Code review agent definitions: (agent_name, review_type, author, prompt_name)
 CODE_REVIEW_AGENTS = [
-    ("code-reviewer", "code-review", "code-reviewer"),
-    ("comment-analyzer", "comment-analysis", "comment-analyzer"),
-    ("pr-test-analyzer", "pr-test-analysis", "pr-test-analyzer"),
-    ("silent-failure-hunter", "silent-failure-hunting", "silent-failure-hunter"),
+    ("code-reviewer", "code-review", "code-reviewer", "review-code-reviewer"),
+    ("comment-analyzer", "comment-analysis", "comment-analyzer", "review-comment-analyzer"),
+    ("pr-test-analyzer", "pr-test-analysis", "pr-test-analyzer", "review-test-analyzer"),
+    ("silent-failure-hunter", "silent-failure-hunting", "silent-failure-hunter", "review-silent-failure-hunter"),
 ]
 
-CODE_REVIEW_SECTION_TYPES = [review_type for _, review_type, _ in CODE_REVIEW_AGENTS]
+CODE_REVIEW_SECTION_TYPES = [review_type for _, review_type, _, _ in CODE_REVIEW_AGENTS]
 
 
 def _parse_task_ref(task_ref: str) -> tuple[str, int]:
@@ -213,7 +213,7 @@ def run_single_review_agent(
     agent_name: str,
     review_type: str,
     author: str | None = None,
-    prompt_name: str = "review-agent",
+    prompt_name: str = "review-code-reviewer",
 ) -> tuple[bool, str | None, float]:
     """Run a single review agent as a Claude session.
 
@@ -258,7 +258,7 @@ def _run_agent_with_retry(
     agent_name: str,
     review_type: str,
     author: str | None = None,
-    prompt_name: str = "review-agent",
+    prompt_name: str = "review-code-reviewer",
 ) -> tuple[bool, str | None, float]:
     """Run review agent with one retry on failure."""
     success, session_id, cost = run_single_review_agent(
@@ -294,11 +294,13 @@ def run_parallel_code_reviews(
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = {
-            executor.submit(_run_agent_with_retry, ctx, agent_name, review_type, author): (
+            executor.submit(
+                _run_agent_with_retry, ctx, agent_name, review_type, author, prompt_name
+            ): (
                 agent_name,
                 review_type,
             )
-            for agent_name, review_type, author in CODE_REVIEW_AGENTS
+            for agent_name, review_type, author, prompt_name in CODE_REVIEW_AGENTS
         }
 
         for future in concurrent.futures.as_completed(futures):
@@ -323,11 +325,13 @@ def _resume_reviewers(ctx: ReviewChainContext, iteration: int) -> float:
     Returns total cost of all re-review sessions.
     """
     total_cost = 0.0
-    for agent_name, review_type, author in CODE_REVIEW_AGENTS:
+    for agent_name, review_type, author, prompt_name in CODE_REVIEW_AGENTS:
         session_id = ctx.review_session_ids.get(agent_name)
         if not session_id:
             # No session to resume — run fresh
-            success, sid, cost = run_single_review_agent(ctx, agent_name, review_type, author)
+            success, sid, cost = run_single_review_agent(
+                ctx, agent_name, review_type, author, prompt_name
+            )
             total_cost += cost
             if sid:
                 ctx.review_session_ids[agent_name] = sid

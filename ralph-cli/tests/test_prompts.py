@@ -9,7 +9,7 @@ class TestLoadPrompt:
 
     def test_loads_existing_prompt(self):
         text = load_prompt(
-            "review-agent",
+            "review-code-reviewer",
             task_ref="proj#1",
             project="proj",
             number="1",
@@ -23,7 +23,7 @@ class TestLoadPrompt:
         assert "code-reviewer" in text
 
     def test_loads_without_substitution(self):
-        text = load_prompt("review-agent")
+        text = load_prompt("review-code-reviewer")
         assert "{task_ref}" in text
 
     def test_raises_for_missing_prompt(self):
@@ -45,7 +45,10 @@ class TestLoadPrompt:
     def test_all_prompt_files_loadable(self):
         """All bundled prompt files should load without errors."""
         prompts = [
-            "review-agent",
+            "review-code-reviewer",
+            "review-comment-analyzer",
+            "review-test-analyzer",
+            "review-silent-failure-hunter",
             "fix-review-issues",
             "code-simplifier",
             "security-reviewer",
