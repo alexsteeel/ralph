@@ -77,7 +77,8 @@ def clear_active_task():
 def extract_task_ref(prompt: str) -> str | None:
     """Extract task reference like 'project#N' from prompt."""
     import re
-    match = re.search(r'([a-zA-Z0-9_-]+#\d+)', prompt)
+
+    match = re.search(r"([a-zA-Z0-9_-]+#\d+)", prompt)
     return match.group(1) if match else None
 
 

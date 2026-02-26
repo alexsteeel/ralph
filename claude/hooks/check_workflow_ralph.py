@@ -91,7 +91,7 @@ def clear_active_task():
 
 def extract_task_ref(prompt: str) -> str | None:
     """Extract task reference like 'project#N' from prompt."""
-    match = re.search(r'([a-zA-Z0-9_-]+#\d+)', prompt)
+    match = re.search(r"([a-zA-Z0-9_-]+#\d+)", prompt)
     return match.group(1) if match else None
 
 
@@ -173,7 +173,7 @@ def check_skipped_tests_in_repo(working_dir: str | None = None) -> list[str]:
             timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
-            for line in result.stdout.strip().split('\n'):
+            for line in result.stdout.strip().split("\n"):
                 # Skip lines with skipif (conditional skip is allowed)
                 if "skipif" in line.lower():
                     continue
@@ -184,7 +184,7 @@ def check_skipped_tests_in_repo(working_dir: str | None = None) -> list[str]:
                 # Only include test files
                 if "test" in line.lower():
                     # Format: file:line:content -> take file:line
-                    parts = line.split(':', 2)
+                    parts = line.split(":", 2)
                     if len(parts) >= 2:
                         matches.append(f"{parts[0]}:{parts[1]}")
     except (subprocess.TimeoutExpired, Exception):

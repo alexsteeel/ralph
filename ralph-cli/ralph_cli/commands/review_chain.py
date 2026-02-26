@@ -66,7 +66,12 @@ CODE_REVIEW_AGENTS = [
     ("code-reviewer", "code-review", "code-reviewer", "review-code-reviewer"),
     ("comment-analyzer", "comment-analysis", "comment-analyzer", "review-comment-analyzer"),
     ("pr-test-analyzer", "pr-test-analysis", "pr-test-analyzer", "review-test-analyzer"),
-    ("silent-failure-hunter", "silent-failure-hunting", "silent-failure-hunter", "review-silent-failure-hunter"),
+    (
+        "silent-failure-hunter",
+        "silent-failure-hunting",
+        "silent-failure-hunter",
+        "review-silent-failure-hunter",
+    ),
 ]
 
 CODE_REVIEW_SECTION_TYPES = [review_type for _, review_type, _, _ in CODE_REVIEW_AGENTS]
