@@ -1,7 +1,10 @@
 """Tests for image commands module."""
 
+import shutil
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
 
 from click.testing import CliRunner
 from ralph_sandbox.cli import cli
@@ -285,8 +288,12 @@ class TestImageListCommand:
         assert result.exit_code == 0
         assert "Image" in result.output or "devcontainer" in result.output
 
+    @pytest.mark.skipif(
+        not shutil.which("docker"),
+        reason="Docker not available",
+    )
     def test_list_images_actual(self):
-        """Test listing images (actual check)."""
+        """Test listing images (actual check, requires Docker)."""
         result = self.runner.invoke(cli, ["image", "list"])
 
         assert result.exit_code == 0

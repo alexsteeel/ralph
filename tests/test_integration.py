@@ -185,10 +185,10 @@ class TestCLIEntryPoints:
 class TestMCPServer:
     """Verify MCP server is accessible."""
 
-    def test_ralph_tasks_serve_starts(self):
-        """MCP server starts and exits cleanly with timeout."""
+    def test_ralph_tasks_web_starts(self):
+        """Web server (with MCP endpoints) starts and exits cleanly with timeout."""
         result = subprocess.run(
-            ["timeout", "3", "uv", "run", "ralph-tasks", "serve"],
+            ["timeout", "3", "uv", "run", "ralph-tasks-web"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -196,7 +196,7 @@ class TestMCPServer:
         )
         # timeout returns 124 when it kills the process — that's fine,
         # it means the server started successfully
-        assert result.returncode in (0, 124), f"MCP server failed to start: stderr={result.stderr}"
+        assert result.returncode in (0, 124), f"Web server failed to start: stderr={result.stderr}"
 
 
 class TestDocumentation:

@@ -13,7 +13,10 @@ import pytest
 # Outside devcontainer (CI, local), it's typically 'localhost'.
 _NEO4J_TEST_USER = "neo4j"
 _NEO4J_TEST_PASSWORD = "testpassword123"
-_NEO4J_CANDIDATE_URIS = ["bolt://ai-sbx-neo4j:7687", "bolt://docker:7687", "bolt://localhost:7687"]
+_NEO4J_CANDIDATE_URIS = [
+    "bolt://docker:17687",  # DinD test compose
+    "bolt://localhost:17687",
+]
 
 
 def _get_test_auth() -> tuple[str, str]:
@@ -62,9 +65,7 @@ def _get_neo4j_uri() -> str | None:
 _MINIO_TEST_ACCESS_KEY = "minioadmin"
 _MINIO_TEST_SECRET_KEY = "minioadmin"
 _MINIO_CANDIDATE_ENDPOINTS = [
-    "ai-sbx-minio:9000",
-    "docker:59000",
-    "localhost:59000",
+    "docker:19000",  # DinD test compose
     "localhost:19000",
 ]
 
@@ -115,9 +116,7 @@ _POSTGRES_TEST_USER = "ralph_test"
 _POSTGRES_TEST_PASSWORD = "testpassword123"
 _POSTGRES_TEST_DB = "ralph_test"
 _POSTGRES_CANDIDATE_URIS = [
-    f"postgresql://{_POSTGRES_TEST_USER}:{_POSTGRES_TEST_PASSWORD}@ai-sbx-postgres:5432/{_POSTGRES_TEST_DB}",
-    f"postgresql://{_POSTGRES_TEST_USER}:{_POSTGRES_TEST_PASSWORD}@docker:55432/{_POSTGRES_TEST_DB}",
-    f"postgresql://{_POSTGRES_TEST_USER}:{_POSTGRES_TEST_PASSWORD}@localhost:55432/{_POSTGRES_TEST_DB}",
+    f"postgresql://{_POSTGRES_TEST_USER}:{_POSTGRES_TEST_PASSWORD}@docker:15432/{_POSTGRES_TEST_DB}",  # DinD test compose
     f"postgresql://{_POSTGRES_TEST_USER}:{_POSTGRES_TEST_PASSWORD}@localhost:15432/{_POSTGRES_TEST_DB}",
 ]
 
