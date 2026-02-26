@@ -28,27 +28,21 @@ def generate_branch_name(description: str) -> str:
     return branch
 
 
-def copy_secure_init(project_root: Path, worktree_path: Path, console: Console) -> None:
-    """Copy init.secure.sh if it exists (for credentials not in git)."""
-    secure_init_src = project_root / ".devcontainer" / "init.secure.sh"
-    secure_init_dest = worktree_path / ".devcontainer" / "init.secure.sh"
+def copy_container_init(project_root: Path, worktree_path: Path, console: Console) -> None:
+    """Copy init-container.sh (or legacy init.secure.sh) if it exists."""
+    # Try new name first, then legacy
+    for filename in ("init-container.sh", "init.secure.sh"):
+        src = project_root / ".devcontainer" / filename
+        if src.exists():
+            dest = worktree_path / ".devcontainer" / filename
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            if os.access(src, os.X_OK):
+                os.chmod(dest, os.stat(src).st_mode)
+            console.print(f"[green]✓[/green] Copied {filename}")
+            return
 
-    if secure_init_src.exists():
-        console.print("[cyan]Found init.secure.sh, copying to worktree...[/cyan]")
-
-        # Ensure .devcontainer directory exists
-        secure_init_dest.parent.mkdir(parents=True, exist_ok=True)
-
-        # Copy the file
-        shutil.copy2(secure_init_src, secure_init_dest)
-
-        # Preserve executable permissions
-        if os.access(secure_init_src, os.X_OK):
-            os.chmod(secure_init_dest, os.stat(secure_init_src).st_mode)
-
-        console.print("[green]✓[/green] Copied init.secure.sh (contains credentials)")
-    else:
-        logger.debug("No init.secure.sh found")
+    logger.debug("No container init script found")
 
 
 def detect_available_ides() -> list[tuple[IDE, str]]:

@@ -1033,8 +1033,8 @@ def init_project(
         console.print("\n[bold]Step 5: Security & Initialization[/bold]")
         console.print("[dim]Configure additional security and initialization options[/dim]")
 
-        # Check if init.secure.sh already exists
-        secure_init_path = devcontainer_dir / "init.secure.sh"
+        # Check if init-container.sh already exists
+        secure_init_path = devcontainer_dir / "init-container.sh"
         init_secure_exists = secure_init_path.exists()
 
         if init_secure_exists:
@@ -1042,7 +1042,7 @@ def init_project(
             security_questions = [
                 inquirer.List(
                     "init_secure_action",
-                    message="init.secure.sh already exists. What would you like to do?",
+                    message="init-container.sh already exists. What would you like to do?",
                     choices=[
                         ("Keep existing file (no changes)", "keep"),
                         ("Replace with new template", "replace"),
@@ -1056,7 +1056,7 @@ def init_project(
             security_questions = [
                 inquirer.Confirm(
                     "create_secure_init",
-                    message="Create init.secure.sh for custom initialization?",
+                    message="Create init-container.sh for custom initialization?",
                     default=False,
                 ),
             ]
@@ -1069,7 +1069,7 @@ def init_project(
             if init_secure_exists:
                 if security_answers.get("init_secure_action") == "view":
                     # Show the existing file content
-                    console.print("\n[cyan]Current init.secure.sh content:[/cyan]")
+                    console.print("\n[cyan]Current init-container.sh content:[/cyan]")
                     console.print("[dim]" + "-" * 60 + "[/dim]")
                     with open(secure_init_path) as f:
                         console.print(f.read())
@@ -1157,10 +1157,10 @@ def init_project(
         else:
             progress.update(task, description="[yellow]⚠[/yellow] Could not update derived files")
 
-        # Create init.secure.sh if requested
+        # Create init-container.sh if requested
         if "create_secure_init" in locals() and create_secure_init:
-            task = progress.add_task("Creating init.secure.sh...", total=None)
-            secure_init_path = devcontainer_dir / "init.secure.sh"
+            task = progress.add_task("Creating init-container.sh...", total=None)
+            secure_init_path = devcontainer_dir / "init-container.sh"
 
             secure_init_content = """#!/bin/bash
 # Custom initialization script for the devcontainer
@@ -1188,9 +1188,9 @@ echo "Initialization complete!"
 
             secure_init_path.write_text(secure_init_content)
             secure_init_path.chmod(0o755)
-            progress.update(task, description="[green]✓[/green] init.secure.sh created")
+            progress.update(task, description="[green]✓[/green] init-container.sh created")
 
-            # Update ai-sbx.yaml to include the init.secure.sh
+            # Update ai-sbx.yaml to include the init-container.sh
             config_file = devcontainer_dir / "ai-sbx.yaml"
             if config_file.exists():
                 try:
@@ -1202,17 +1202,17 @@ echo "Initialization complete!"
                     # Add initialization script to config
                     if "initialization" not in yaml_config:
                         yaml_config["initialization"] = {}
-                    yaml_config["initialization"]["script"] = "./init.secure.sh"
+                    yaml_config["initialization"]["script"] = "./init-container.sh"
 
                     with open(config_file, "w") as f:
                         yaml.safe_dump(yaml_config, f, default_flow_style=False, sort_keys=False)
 
                     progress.update(
-                        task, description="[green]✓[/green] Updated ai-sbx.yaml with init.secure.sh"
+                        task, description="[green]✓[/green] Updated ai-sbx.yaml with init-container.sh"
                     )
                 except Exception:
                     console.print(
-                        "[yellow]Note: Please add './init.secure.sh' to your initialization scripts[/yellow]"
+                        "[yellow]Note: Please add './init-container.sh' to your initialization scripts[/yellow]"
                     )
 
         # Set permissions
@@ -1263,7 +1263,7 @@ echo "Initialization complete!"
     if config.proxy.whitelist_domains:
         table.add_row("Extra Whitelist", ", ".join(config.proxy.whitelist_domains))
     if "create_secure_init" in locals() and create_secure_init:
-        table.add_row("Initialization Script", "init.secure.sh created")
+        table.add_row("Initialization Script", "init-container.sh created")
 
     console.print(table)
 

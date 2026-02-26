@@ -8,7 +8,7 @@ from ralph_sandbox.config import IDE
 from ralph_sandbox.utils import find_project_root, logger, prompt_yes_no, run_command
 
 from .utils import (
-    copy_secure_init,
+    copy_container_init,
     detect_available_ides,
     generate_branch_name,
     get_preferred_ide,
@@ -216,8 +216,8 @@ def create(
         console.print(f"[red]Failed to create worktree: {e}[/red]")
         return
 
-    # Copy init.secure.sh if it exists (for credentials not in git)
-    copy_secure_init(project_root, worktree_path, console)
+    # Copy container init script if it exists
+    copy_container_init(project_root, worktree_path, console)
 
     # Determine preferred IDE
     preferred_ide = None

@@ -135,7 +135,7 @@ class TemplateManager:
 ai-sbx.yaml
 
 # Security-sensitive initialization script (contains secrets/credentials)
-init.secure.sh
+init-container.sh
 
 # NOTE: docker-compose.base.yaml is tracked - uses environment variables for system-specific paths
 # NOTE: docker-compose.override.yaml is tracked - contains common project overrides

@@ -5,7 +5,8 @@
 # Local project configuration (contains machine-specific paths)
 ai-sbx.yaml
 
-# Security-sensitive initialization script (contains secrets/credentials)
+# Container initialization script (not tracked, created by ai-sbx init)
+init-container.sh
 init.secure.sh
 
 # NOTE: docker-compose.base.yaml is tracked - uses environment variables for system-specific paths
