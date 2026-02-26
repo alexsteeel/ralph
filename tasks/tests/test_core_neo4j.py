@@ -1,6 +1,7 @@
 """Tests for core.py with Neo4j backend."""
 
 import logging
+from unittest.mock import patch
 
 import pytest
 from ralph_tasks import core
@@ -126,16 +127,16 @@ class TestGetTask:
 
 @pytest.mark.neo4j
 class TestListTasks:
-    def test_list_tasks_no_sections(self, graph_core):
+    def test_list_tasks_includes_sections(self, graph_core):
         core.create_task("proj", "Task A", description="Body A")
         core.create_task("proj", "Task B", description="Body B")
         tasks = core.list_tasks("proj")
         assert len(tasks) == 2
         assert tasks[0].number == 1
         assert tasks[1].number == 2
-        # Summary mode — no section content
-        assert tasks[0].description == ""
-        assert tasks[1].description == ""
+        # list_tasks now includes section content
+        assert tasks[0].description == "Body A"
+        assert tasks[1].description == "Body B"
 
 
 @pytest.mark.neo4j
@@ -372,9 +373,10 @@ class TestProjectNameMigration:
         with graph_core.session() as session:
             crud.create_project(session, core.DEFAULT_WORKSPACE, "old_project")
 
-        # Force re-migration
-        with graph_core.session() as session:
-            core._migrate_project_names(session)
+        # Force re-migration (mock MinIO to avoid S3 connection errors)
+        with patch("ralph_tasks.core.storage.migrate_project_prefix", return_value=0):
+            with graph_core.session() as session:
+                core._migrate_project_names(session)
 
         # Should now exist under canonical name
         assert core.project_exists("old-project") is True

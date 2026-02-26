@@ -1,9 +1,28 @@
 """Tests for review REST API endpoints in web.py."""
 
 import pytest
+from ralph_tasks import core
 from ralph_tasks.graph import crud
+from ralph_tasks.graph.schema import ensure_schema
 from ralph_tasks.web import app
 from starlette.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def _web_core(neo4j_client, monkeypatch):
+    """Configure core module to use the test Neo4j client for web endpoint calls."""
+    core.reset_client()
+    monkeypatch.setattr(core, "_client", neo4j_client)
+    monkeypatch.setattr(core, "_schema_initialized", False)
+    ensure_schema(neo4j_client)
+    with neo4j_client.session() as session:
+        ws = crud.get_workspace(session, core.DEFAULT_WORKSPACE)
+        if ws is None:
+            crud.create_workspace(session, core.DEFAULT_WORKSPACE)
+    monkeypatch.setattr(core, "_schema_initialized", True)
+    yield
+    core._client = None
+    core._schema_initialized = False
 
 
 @pytest.fixture

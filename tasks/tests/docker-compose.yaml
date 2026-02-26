@@ -29,7 +29,7 @@ services:
     image: postgres:16-alpine
     container_name: postgres-test
     ports:
-      - "127.0.0.1:15432:5432"
+      - "15432:5432"
     environment:
       POSTGRES_USER: "ralph_test"
       POSTGRES_PASSWORD: "testpassword123"
