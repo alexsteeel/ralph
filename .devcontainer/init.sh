@@ -35,7 +35,7 @@ if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
     echo "Warning: Docker did not become ready, skipping test services"
 else
     for attempt in 1 2 3; do
-        if docker compose -f "$PROJECT_DIR/tasks/tests/docker-compose.yaml" up -d 2>&1; then
+        if docker compose -p ralph-tests -f "$PROJECT_DIR/tasks/tests/docker-compose.yaml" up -d 2>&1; then
             echo "Test services started (docker:17687, docker:19000, docker:15432)"
             break
         fi
