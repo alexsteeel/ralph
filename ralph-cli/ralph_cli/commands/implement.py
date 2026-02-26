@@ -119,15 +119,23 @@ def run_implement(
         # Capture HEAD before task execution for review scope
         base_commit = get_head_commit(working_dir)
 
-        result = execute_task_with_recovery(
-            task_ref=task_ref,
-            working_dir=working_dir,
-            log_dir=log_dir,
-            settings=settings,
-            notifier=notifier,
-            session_log=session_log,
-            extra_prompt=extra_prompt,
-        )
+        try:
+            result = execute_task_with_recovery(
+                task_ref=task_ref,
+                working_dir=working_dir,
+                log_dir=log_dir,
+                settings=settings,
+                notifier=notifier,
+                session_log=session_log,
+                extra_prompt=extra_prompt,
+            )
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Interrupted by user[/yellow]")
+            session_log.append(f"Interrupted: {task_ref}")
+            failed.append(task_num)
+            failed_reasons.append("INTERRUPTED")
+            pipeline_stopped = True
+            break
 
         task_durations[task_num] = format_duration(result.duration_seconds)
         task_costs[task_num] = result.cost_usd

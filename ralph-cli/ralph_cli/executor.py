@@ -155,10 +155,19 @@ def run_claude(
         )
 
         # Process stream
-        if process.stdout:
-            result = monitor.process_stream(process.stdout)
-        else:
-            result = None
+        try:
+            if process.stdout:
+                result = monitor.process_stream(process.stdout)
+            else:
+                result = None
+        except KeyboardInterrupt:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            raise
 
         try:
             exit_code = process.wait(timeout=30)
