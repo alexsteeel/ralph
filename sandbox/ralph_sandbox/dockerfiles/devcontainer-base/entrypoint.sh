@@ -221,5 +221,12 @@ if command -v claude &> /dev/null; then
     fi
 fi
 
+# Ensure codex config.toml has correct ralph-tasks MCP URL
+# Volume persists old config across image rebuilds
+CODEX_CONFIG="/home/claude/.codex/config.toml"
+if [ -f "$CODEX_CONFIG" ]; then
+    sed -i 's|http://ai-sbx-ralph-tasks:8000/mcp"|http://ai-sbx-ralph-tasks:8000/mcp-swe"|' "$CODEX_CONFIG"
+fi
+
 # Execute the original command
 exec "$@"
