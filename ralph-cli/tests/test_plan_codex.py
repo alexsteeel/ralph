@@ -1,11 +1,25 @@
 """Tests for Codex plan review in plan command."""
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
 from ralph_cli.commands.plan import FlexibleConfirm, run_codex_plan_review
 from ralph_cli.config import Settings
+from ralph_cli.mcp import McpRegistrationError
 from ralph_cli.prompts import load_prompt
+
+
+@contextmanager
+def _noop_codex_mcp_role(*args, **kwargs):
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _mock_codex_mcp():
+    """Prevent real codex config.toml patching in tests."""
+    with patch("ralph_cli.commands.plan.codex_mcp_role", _noop_codex_mcp_role):
+        yield
 
 
 @pytest.fixture
@@ -133,6 +147,19 @@ class TestRunCodexPlanReview:
         assert "exec" not in cmd
         assert "--full-auto" not in cmd
         assert "proj" in cmd[-1]
+
+    @patch("ralph_cli.commands.plan.shutil.which", return_value="/usr/bin/codex")
+    def test_mcp_failure_returns_false(self, mock_which, temp_dir, settings, session_log):
+        """McpRegistrationError from codex_mcp_role returns False."""
+
+        @contextmanager
+        def _failing(*args, **kwargs):
+            raise McpRegistrationError("config not found")
+            yield  # noqa: RET503
+
+        with patch("ralph_cli.commands.plan.codex_mcp_role", _failing):
+            result = run_codex_plan_review(**self._make_kwargs(settings, session_log, temp_dir))
+        assert result is False
 
 
 # ---------------------------------------------------------------------------

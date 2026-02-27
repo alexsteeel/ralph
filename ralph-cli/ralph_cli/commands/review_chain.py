@@ -1,11 +1,9 @@
 """Review chain orchestration — all review phases after main implementation."""
 
-import concurrent.futures
 import logging
 import os
 import shutil
 import subprocess
-import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -16,6 +14,7 @@ from rich.console import Console
 from ..config import Settings
 from ..executor import run_claude
 from ..logging import SessionLog, format_duration
+from ..mcp import McpRegistrationError, McpReviewerRole, codex_mcp_role, mcp_role
 from ..notify import Notifier
 from ..prompts import load_prompt
 
@@ -38,7 +37,6 @@ class ReviewChainContext:
     main_session_id: str | None = None
     base_commit: str | None = None
     review_session_ids: dict[str, str | None] = field(default_factory=dict)
-    _lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 @dataclass
@@ -222,6 +220,9 @@ def run_single_review_agent(
 ) -> tuple[bool, str | None, float]:
     """Run a single review agent as a Claude session.
 
+    Switches MCP to Reviewer role (with review_type) before launching Claude,
+    restores SWE role after.
+
     Returns (success, session_id, cost_usd).
     """
     author = author or agent_name
@@ -241,12 +242,17 @@ def run_single_review_agent(
 
     log_path = _log_path(ctx, agent_name)
 
-    result = run_claude(
-        prompt=prompt,
-        working_dir=ctx.working_dir,
-        log_path=log_path,
-        model=ctx.settings.claude_review_model,
-    )
+    try:
+        with mcp_role(McpReviewerRole(review_type), ctx.settings.ralph_tasks_api_key):
+            result = run_claude(
+                prompt=prompt,
+                working_dir=ctx.working_dir,
+                log_path=log_path,
+                model=ctx.settings.claude_review_model,
+            )
+    except McpRegistrationError as e:
+        console.print(f"[red]✗ {agent_name} MCP setup failed: {e}[/red]")
+        return False, None, 0.0
 
     if result.error_type.is_success:
         console.print(
@@ -273,8 +279,7 @@ def _run_agent_with_retry(
         return True, session_id, cost
 
     console.print(f"[yellow]Retrying {agent_name}...[/yellow]")
-    with ctx._lock:
-        ctx.session_log.append(f"Retrying {agent_name} after failure")
+    ctx.session_log.append(f"Retrying {agent_name} after failure")
     retry_success, retry_sid, retry_cost = run_single_review_agent(
         ctx, agent_name, review_type, author, prompt_name
     )
@@ -286,10 +291,14 @@ def _run_agent_with_retry(
 # ---------------------------------------------------------------------------
 
 
-def run_parallel_code_reviews(
+def run_code_reviews(
     ctx: ReviewChainContext,
 ) -> tuple[dict[str, tuple[bool, str | None]], float]:
-    """Run 4 code review agents in parallel.
+    """Run code review agents sequentially with per-agent MCP role switching.
+
+    Each agent gets Reviewer MCP role with its review_type, then SWE is restored.
+    Sequential execution is required because all agents share a single
+    ralph-tasks MCP registration — parallel switching would race.
 
     Returns (results_dict, total_cost) where results_dict is
     {agent_name: (success, session_id)}.
@@ -297,29 +306,18 @@ def run_parallel_code_reviews(
     results: dict[str, tuple[bool, str | None]] = {}
     total_cost = 0.0
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {
-            executor.submit(
-                _run_agent_with_retry, ctx, agent_name, review_type, author, prompt_name
-            ): (
-                agent_name,
-                review_type,
+    for agent_name, review_type, author, prompt_name in CODE_REVIEW_AGENTS:
+        try:
+            success, session_id, cost = _run_agent_with_retry(
+                ctx, agent_name, review_type, author, prompt_name
             )
-            for agent_name, review_type, author, prompt_name in CODE_REVIEW_AGENTS
-        }
-
-        for future in concurrent.futures.as_completed(futures):
-            agent_name, review_type = futures[future]
-            try:
-                success, session_id, cost = future.result()
-                results[agent_name] = (success, session_id)
-                total_cost += cost
-                if session_id:
-                    with ctx._lock:
-                        ctx.review_session_ids[agent_name] = session_id
-            except Exception as e:
-                logger.error("Agent %s raised exception: %s", agent_name, e)
-                results[agent_name] = (False, None)
+            results[agent_name] = (success, session_id)
+            total_cost += cost
+            if session_id:
+                ctx.review_session_ids[agent_name] = session_id
+        except Exception as e:
+            logger.error("Agent %s raised exception: %s", agent_name, e)
+            results[agent_name] = (False, None)
 
     return results, total_cost
 
@@ -327,13 +325,14 @@ def run_parallel_code_reviews(
 def _resume_reviewers(ctx: ReviewChainContext, iteration: int) -> float:
     """Resume each code reviewer to re-check after fixes.
 
+    Each reviewer runs under its Reviewer MCP role.
     Returns total cost of all re-review sessions.
     """
     total_cost = 0.0
     for agent_name, review_type, author, prompt_name in CODE_REVIEW_AGENTS:
         session_id = ctx.review_session_ids.get(agent_name)
         if not session_id:
-            # No session to resume — run fresh
+            # No session to resume — run fresh (mcp_role handled inside)
             success, sid, cost = run_single_review_agent(
                 ctx, agent_name, review_type, author, prompt_name
             )
@@ -348,13 +347,18 @@ def _resume_reviewers(ctx: ReviewChainContext, iteration: int) -> float:
         )
         log_path = _log_path(ctx, agent_name, f"_rereview{iteration}")
 
-        result = run_claude(
-            prompt=prompt,
-            working_dir=ctx.working_dir,
-            log_path=log_path,
-            model=ctx.settings.claude_review_model,
-            resume_session=session_id,
-        )
+        try:
+            with mcp_role(McpReviewerRole(review_type), ctx.settings.ralph_tasks_api_key):
+                result = run_claude(
+                    prompt=prompt,
+                    working_dir=ctx.working_dir,
+                    log_path=log_path,
+                    model=ctx.settings.claude_review_model,
+                    resume_session=session_id,
+                )
+        except McpRegistrationError as e:
+            console.print(f"[yellow]⚠ {agent_name} re-review MCP failed: {e}[/yellow]")
+            continue
 
         total_cost += result.cost_usd
         if result.session_id:
@@ -382,8 +386,8 @@ def run_code_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
     console.rule(f"[cyan]Code Review Group: {ctx.task_ref}[/cyan]")
     ctx.session_log.append("Code review group started")
 
-    # Initial parallel review
-    results, review_cost = run_parallel_code_reviews(ctx)
+    # Initial review (sequential — MCP role switches per agent)
+    results, review_cost = run_code_reviews(ctx)
     phase_cost += review_cost
     succeeded = sum(1 for s, _ in results.values() if s)
 
@@ -527,7 +531,7 @@ def run_security_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
             ctx.session_log.append(f"Security review fix failed at iteration {iteration}")
             return ReviewPhaseResult(success=False, cost_usd=phase_cost, error="Fix session failed")
 
-        # Re-review (resume security session)
+        # Re-review (resume security session under Reviewer role)
         sec_session_id = ctx.review_session_ids.get("security-reviewer")
         if sec_session_id:
             prompt = (
@@ -535,17 +539,25 @@ def run_security_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
                 "Re-review the changes and update finding statuses."
             )
             log_path = _log_path(ctx, "security-reviewer", f"_rereview{iteration + 1}")
-            result = run_claude(
-                prompt=prompt,
-                working_dir=ctx.working_dir,
-                log_path=log_path,
-                model=ctx.settings.claude_review_model,
-                resume_session=sec_session_id,
-            )
+            try:
+                with mcp_role(
+                    McpReviewerRole("security-review"), ctx.settings.ralph_tasks_api_key
+                ):
+                    result = run_claude(
+                        prompt=prompt,
+                        working_dir=ctx.working_dir,
+                        log_path=log_path,
+                        model=ctx.settings.claude_review_model,
+                        resume_session=sec_session_id,
+                    )
+            except McpRegistrationError as e:
+                console.print(f"[yellow]⚠ Security re-review MCP failed: {e}[/yellow]")
+                continue
             phase_cost += result.cost_usd
             if result.session_id:
                 ctx.review_session_ids["security-reviewer"] = result.session_id
         else:
+            # mcp_role handled inside run_single_review_agent
             _, _, rr_cost = run_single_review_agent(
                 ctx, "security-reviewer", "security-review", prompt_name="security-reviewer"
             )
@@ -565,32 +577,13 @@ def run_security_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
 # ---------------------------------------------------------------------------
 
 
-def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
-    """Run codex review with iterative fix cycle (subprocess-based)."""
-    console.rule(f"[cyan]Codex Review: {ctx.task_ref}[/cyan]")
-    ctx.session_log.append("Codex review started")
-
-    if not shutil.which("codex"):
-        console.print("[yellow]⚠ Codex not found in PATH, skipping[/yellow]")
-        ctx.session_log.append("Codex not found in PATH, skipping")
-        return ReviewPhaseResult(success=True, error="Codex not found")
-
-    try:
-        initial_prompt = load_prompt(
-            "codex-reviewer",
-            task_ref=ctx.task_ref,
-            project=ctx.project,
-            number=str(ctx.task_number),
-            base_commit=ctx.base_commit or "",
-        )
-    except FileNotFoundError:
-        console.print("[yellow]⚠ Codex reviewer prompt not found[/yellow]")
-        return ReviewPhaseResult(success=True, error="Prompt not found")
-
-    max_iter = ctx.settings.codex_review_max_iterations
-    model = ctx.settings.codex_review_model
-    # Codex CLI runs as subprocess — no API cost tracking for the review itself.
-    # Only fix sessions (run_claude) contribute to phase_cost.
+def _run_codex_iterations(
+    ctx: ReviewChainContext,
+    initial_prompt: str,
+    max_iter: int,
+    model: str,
+) -> ReviewPhaseResult:
+    """Run codex review iterations (called under codex_mcp_role context)."""
     phase_cost = 0.0
 
     for iteration in range(1, max_iter + 1):
@@ -644,31 +637,47 @@ def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
                 )
                 ctx.session_log.append(f"Codex review failed at iteration {iteration}")
                 return ReviewPhaseResult(
-                    success=False, error=f"Exit code {proc.returncode}", cost_usd=phase_cost
+                    success=False,
+                    error=f"Exit code {proc.returncode}",
+                    cost_usd=phase_cost,
                 )
 
-            console.print(f"[green]Codex review done ({format_duration(duration)})[/green]")
+            console.print(
+                f"[green]Codex review done ({format_duration(duration)})[/green]"
+            )
 
             # Check LGTM via Neo4j findings (consistent with other phases)
-            is_lgtm, open_count = check_lgtm(ctx.project, ctx.task_number, ["codex-review"])
+            is_lgtm, open_count = check_lgtm(
+                ctx.project, ctx.task_number, ["codex-review"]
+            )
 
             if is_lgtm:
                 if iteration > 1:
-                    create_fixup_commit(ctx.working_dir, ctx.session_log, "codex fixes")
+                    create_fixup_commit(
+                        ctx.working_dir, ctx.session_log, "codex fixes"
+                    )
                 ctx.session_log.append(f"Codex LGTM after {iteration} iteration(s)")
                 console.print("[green]✓ Codex Review: LGTM[/green]")
-                return ReviewPhaseResult(success=True, lgtm=True, cost_usd=phase_cost)
+                return ReviewPhaseResult(
+                    success=True, lgtm=True, cost_usd=phase_cost
+                )
 
-            console.print(f"[yellow]Codex review: {open_count} open finding(s)[/yellow]")
+            console.print(
+                f"[yellow]Codex review: {open_count} open finding(s)[/yellow]"
+            )
 
             # Fix (not on last iteration)
             if iteration < max_iter:
                 fix_ok, fix_cost = run_fix_session(ctx, ["codex-review"], iteration)
                 phase_cost += fix_cost
                 if not fix_ok:
-                    ctx.session_log.append(f"Codex fix failed at iteration {iteration}")
+                    ctx.session_log.append(
+                        f"Codex fix failed at iteration {iteration}"
+                    )
                     return ReviewPhaseResult(
-                        success=False, error="Fix session failed", cost_usd=phase_cost
+                        success=False,
+                        error="Fix session failed",
+                        cost_usd=phase_cost,
                     )
 
         except Exception as e:
@@ -681,6 +690,42 @@ def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
     ctx.session_log.append(f"Codex review: max iterations ({max_iter}) reached")
     console.print("[yellow]⚠ Codex Review: max iterations reached[/yellow]")
     return ReviewPhaseResult(success=True, lgtm=False, cost_usd=phase_cost)
+
+
+def run_codex_review_phase(ctx: ReviewChainContext) -> ReviewPhaseResult:
+    """Run codex review with iterative fix cycle (subprocess-based)."""
+    console.rule(f"[cyan]Codex Review: {ctx.task_ref}[/cyan]")
+    ctx.session_log.append("Codex review started")
+
+    if not shutil.which("codex"):
+        console.print("[yellow]⚠ Codex not found in PATH, skipping[/yellow]")
+        ctx.session_log.append("Codex not found in PATH, skipping")
+        return ReviewPhaseResult(success=True, error="Codex not found")
+
+    try:
+        initial_prompt = load_prompt(
+            "codex-reviewer",
+            task_ref=ctx.task_ref,
+            project=ctx.project,
+            number=str(ctx.task_number),
+            base_commit=ctx.base_commit or "",
+        )
+    except FileNotFoundError:
+        console.print("[yellow]⚠ Codex reviewer prompt not found[/yellow]")
+        return ReviewPhaseResult(success=True, error="Prompt not found")
+
+    max_iter = ctx.settings.codex_review_max_iterations
+    model = ctx.settings.codex_review_model
+
+    # Switch Codex config.toml to Reviewer role for the duration of all iterations.
+    # Fix sessions inside the loop use Claude (not Codex), so no conflict.
+    try:
+        with codex_mcp_role(McpReviewerRole("codex-review")):
+            return _run_codex_iterations(ctx, initial_prompt, max_iter, model)
+    except McpRegistrationError as e:
+        console.print(f"[red]✗ Codex MCP setup failed: {e}[/red]")
+        ctx.session_log.append(f"Codex MCP setup failed: {e}")
+        return ReviewPhaseResult(success=False, error=str(e))
 
 
 # ---------------------------------------------------------------------------

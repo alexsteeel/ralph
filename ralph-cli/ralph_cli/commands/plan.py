@@ -13,6 +13,7 @@ from ..config import Settings, get_settings
 from ..executor import expand_task_ranges
 from ..git import cleanup_working_dir, get_current_branch, get_files_to_clean
 from ..logging import SessionLog, format_duration
+from ..mcp import McpRegistrationError, McpReviewerRole, McpRole, codex_mcp_role, mcp_role
 from ..metrics import submit_session_metrics
 from ..prompts import load_prompt
 
@@ -73,7 +74,8 @@ def run_codex_plan_review(
     start_time = time.time()
 
     try:
-        result = subprocess.run(cmd, cwd=working_dir)
+        with codex_mcp_role(McpReviewerRole("plan-review")):
+            result = subprocess.run(cmd, cwd=working_dir)
 
         duration = int(time.time() - start_time)
         formatted = format_duration(duration)
@@ -89,6 +91,10 @@ def run_codex_plan_review(
         session_log.append(f"Codex plan review done ({formatted})")
         return True
 
+    except McpRegistrationError as e:
+        console.print(f"[red]Codex plan review MCP setup failed: {e}[/red]")
+        session_log.append(f"Codex plan review MCP setup failed: {e}")
+        return False
     except Exception as e:
         console.print(f"[red]Codex plan review error: {e}[/red]")
         session_log.append(f"Codex plan review error: {e}")
@@ -210,7 +216,16 @@ def run_plan(
         ]
 
         try:
-            result = subprocess.run(cmd, cwd=working_dir)
+            # Switch ralph-tasks MCP to Planner role (can write plan field),
+            # restore SWE role when done
+            try:
+                with mcp_role(McpRole.PLANNER, settings.ralph_tasks_api_key):
+                    result = subprocess.run(cmd, cwd=working_dir)
+            except McpRegistrationError as e:
+                console.print(f"[red]✗ MCP setup failed: {e}[/red]")
+                session_log.append(f"MCP setup failed for {task_ref}: {e}")
+                failed.append(task_num)
+                continue
 
             if result.returncode == 0:
                 console.print(f"[green]✓ Completed: {task_ref}[/green]")

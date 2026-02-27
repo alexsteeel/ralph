@@ -10,7 +10,7 @@ You are fixing review findings for task {task_ref}.
 
 If the finding is valid:
 1. Fix the code as suggested
-2. Call `resolve_finding(finding_id, response="description of what was fixed")`
+2. Call `reply_to_finding(finding_id, text="Fixed: description of what was done", author="swe")`
 
 ## Declining a Finding
 

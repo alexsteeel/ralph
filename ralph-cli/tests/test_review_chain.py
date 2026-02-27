@@ -1,5 +1,6 @@
 """Tests for review chain orchestration."""
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,15 +15,22 @@ from ralph_cli.commands.review_chain import (
     check_lgtm,
     create_fixup_commit,
     run_code_review_phase,
+    run_code_reviews,
     run_codex_review_phase,
     run_finalization_phase,
-    run_parallel_code_reviews,
     run_review_chain,
     run_security_review_phase,
     run_simplifier_phase,
     run_single_review_agent,
 )
 from ralph_cli.config import Settings
+from ralph_cli.mcp import McpRegistrationError
+
+
+@contextmanager
+def _failing_mcp_role(*args, **kwargs):
+    raise McpRegistrationError("MCP registration failed")
+    yield  # noqa: RET503 — unreachable, required by generator protocol
 
 
 @pytest.fixture
@@ -70,6 +78,21 @@ def ctx(temp_dir, settings, session_log, notifier):
         main_session_id="main-session-123",
         base_commit="abc123def456",
     )
+
+
+@contextmanager
+def _noop_mcp_role(*args, **kwargs):
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _mock_mcp_role():
+    """Prevent real MCP registration and codex config patching in tests."""
+    with (
+        patch("ralph_cli.commands.review_chain.mcp_role", _noop_mcp_role),
+        patch("ralph_cli.commands.review_chain.codex_mcp_role", _noop_mcp_role),
+    ):
+        yield
 
 
 def _make_result(success=True, cost=0.05, duration=30, session_id="sess-1"):
@@ -239,6 +262,16 @@ class TestRunSingleReviewAgent:
             author="code-reviewer",
         )
 
+    def test_mcp_failure_returns_false(self, ctx):
+        """McpRegistrationError should be caught and return (False, None, 0.0)."""
+        with patch("ralph_cli.commands.review_chain.mcp_role", _failing_mcp_role):
+            success, sid, cost = run_single_review_agent(
+                ctx, "code-reviewer", "code-review"
+            )
+        assert success is False
+        assert sid is None
+        assert cost == 0.0
+
 
 # ---------------------------------------------------------------------------
 # _run_agent_with_retry
@@ -269,7 +302,7 @@ class TestRunAgentWithRetry:
 
 
 # ---------------------------------------------------------------------------
-# run_parallel_code_reviews
+# run_code_reviews
 # ---------------------------------------------------------------------------
 
 
@@ -277,7 +310,7 @@ class TestRunParallelCodeReviews:
     @patch("ralph_cli.commands.review_chain.run_claude")
     def test_all_succeed(self, mock_run_claude, ctx):
         mock_run_claude.return_value = _make_result(success=True)
-        results, total_cost = run_parallel_code_reviews(ctx)
+        results, total_cost = run_code_reviews(ctx)
         assert len(results) == 4
         assert all(success for success, _ in results.values())
         assert total_cost > 0
@@ -285,14 +318,14 @@ class TestRunParallelCodeReviews:
     @patch("ralph_cli.commands.review_chain.run_claude")
     def test_stores_session_ids(self, mock_run_claude, ctx):
         mock_run_claude.return_value = _make_result(success=True, session_id="s1")
-        run_parallel_code_reviews(ctx)
+        run_code_reviews(ctx)
         # All 4 agents should have session IDs stored
         assert len(ctx.review_session_ids) == 4
 
     @patch("ralph_cli.commands.review_chain.run_claude")
     def test_aggregates_cost(self, mock_run_claude, ctx):
         mock_run_claude.return_value = _make_result(success=True, cost=0.10)
-        _, total_cost = run_parallel_code_reviews(ctx)
+        _, total_cost = run_code_reviews(ctx)
         # 4 agents, each costs 0.10 (no retry since all succeed)
         assert total_cost == pytest.approx(0.40, abs=0.01)
 
@@ -304,7 +337,7 @@ class TestRunParallelCodeReviews:
 
 class TestRunCodeReviewPhase:
     @patch("ralph_cli.commands.review_chain.check_lgtm", return_value=(True, 0))
-    @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
+    @patch("ralph_cli.commands.review_chain.run_code_reviews")
     def test_lgtm_first_iteration(self, mock_parallel, mock_lgtm, ctx):
         mock_parallel.return_value = (
             {
@@ -320,7 +353,7 @@ class TestRunCodeReviewPhase:
         assert result.lgtm is True
         assert result.cost_usd == pytest.approx(0.40)
 
-    @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
+    @patch("ralph_cli.commands.review_chain.run_code_reviews")
     def test_all_agents_fail(self, mock_parallel, ctx):
         mock_parallel.return_value = (
             {
@@ -340,7 +373,7 @@ class TestRunCodeReviewPhase:
     @patch("ralph_cli.commands.review_chain._resume_reviewers", return_value=0.10)
     @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=(True, 0.05))
     @patch("ralph_cli.commands.review_chain.check_lgtm")
-    @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
+    @patch("ralph_cli.commands.review_chain.run_code_reviews")
     def test_lgtm_after_fix(self, mock_parallel, mock_lgtm, mock_fix, mock_resume, mock_fixup, ctx):
         mock_parallel.return_value = ({"code-reviewer": (True, "s1")}, 0.10)
         # First check: not LGTM; after fix: LGTM
@@ -356,7 +389,7 @@ class TestRunCodeReviewPhase:
     @patch("ralph_cli.commands.review_chain._resume_reviewers", return_value=0.10)
     @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=(True, 0.05))
     @patch("ralph_cli.commands.review_chain.check_lgtm", return_value=(False, 3))
-    @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
+    @patch("ralph_cli.commands.review_chain.run_code_reviews")
     def test_max_iterations(self, mock_parallel, mock_lgtm, mock_fix, mock_resume, mock_fixup, ctx):
         mock_parallel.return_value = ({"code-reviewer": (True, "s1")}, 0.10)
         result = run_code_review_phase(ctx)
@@ -366,7 +399,7 @@ class TestRunCodeReviewPhase:
 
     @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=(False, 0.05))
     @patch("ralph_cli.commands.review_chain.check_lgtm", return_value=(False, 1))
-    @patch("ralph_cli.commands.review_chain.run_parallel_code_reviews")
+    @patch("ralph_cli.commands.review_chain.run_code_reviews")
     def test_fix_failure_stops(self, mock_parallel, mock_lgtm, mock_fix, ctx):
         mock_parallel.return_value = ({"code-reviewer": (True, "s1")}, 0.10)
         result = run_code_review_phase(ctx)
@@ -439,6 +472,26 @@ class TestRunSecurityReviewPhase:
         result = run_security_review_phase(ctx)
         assert result.success is True
         assert result.lgtm is True
+
+    @patch("ralph_cli.commands.review_chain.create_fixup_commit")
+    @patch("ralph_cli.commands.review_chain.run_fix_session", return_value=(True, 0.05))
+    @patch("ralph_cli.commands.review_chain.check_lgtm")
+    @patch("ralph_cli.commands.review_chain._run_agent_with_retry")
+    def test_rereview_mcp_failure_continues(
+        self, mock_agent, mock_lgtm, mock_fix, mock_fixup, ctx
+    ):
+        """McpRegistrationError during security re-review should not crash the phase."""
+        mock_agent.return_value = (True, "sec-1", 0.10)
+        # Not LGTM twice → fix → re-review MCP fails → max iterations
+        mock_lgtm.side_effect = [(False, 1), (False, 1)]
+        ctx.review_session_ids["security-reviewer"] = "sec-1"
+
+        with patch("ralph_cli.commands.review_chain.mcp_role", _failing_mcp_role):
+            result = run_security_review_phase(ctx)
+
+        # Should not crash — phase completes with max iterations
+        assert result.success is True
+        assert result.lgtm is False
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +574,14 @@ class TestRunCodexReviewPhase:
         assert result.lgtm is True
         assert result.cost_usd == pytest.approx(0.05)
         mock_fix.assert_called_once()
+
+    @patch("ralph_cli.commands.review_chain.shutil.which", return_value="/usr/bin/codex")
+    def test_mcp_failure_returns_false(self, mock_which, ctx):
+        """McpRegistrationError from codex_mcp_role returns success=False."""
+        with patch("ralph_cli.commands.review_chain.codex_mcp_role", _failing_mcp_role):
+            result = run_codex_review_phase(ctx)
+        assert result.success is False
+        assert "MCP" in result.error
 
 
 # ---------------------------------------------------------------------------
