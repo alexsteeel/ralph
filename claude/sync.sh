@@ -1,7 +1,12 @@
 #!/bin/bash
 # Sync claude config, update packages and rebuild images after code changes.
-# Usage: ./claude/sync.sh
+# Usage: ./claude/sync.sh [--no-cache]
 set -euo pipefail
+
+NO_CACHE=""
+if [[ "${1:-}" == "--no-cache" ]]; then
+    NO_CACHE="--no-cache"
+fi
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 MONOREPO_ROOT="$(cd "${REPO_DIR}/.." && pwd)"
@@ -87,10 +92,30 @@ fi
 echo ""
 echo "=== Rebuilding Docker images"
 
+RALPH_TASKS_IMAGE_BEFORE=$(docker inspect ai-sbx-ralph-tasks:latest --format='{{.Id}}' 2>/dev/null || echo "none")
+
 if ! command -v ai-sbx >/dev/null 2>&1; then
     echo "  ⚠ ai-sbx not found, skipping"
 else
-    ai-sbx image build --force
+    ai-sbx image build --force $NO_CACHE
+fi
+
+# --- 5. Restart ralph-tasks container (only if image changed) ---
+RALPH_TASKS_IMAGE_AFTER=$(docker inspect ai-sbx-ralph-tasks:latest --format='{{.Id}}' 2>/dev/null || echo "none")
+
+if [[ "$RALPH_TASKS_IMAGE_BEFORE" != "$RALPH_TASKS_IMAGE_AFTER" ]]; then
+    echo ""
+    echo "=== Restarting ralph-tasks container (image changed)"
+
+    COMPOSE_FILE="${HOME}/.ai-sbx/share/docker-proxy/docker-compose.yaml"
+    if [[ ! -f "$COMPOSE_FILE" ]]; then
+        echo "  ⚠ ${COMPOSE_FILE} not found, skipping"
+    elif ! docker compose -f "$COMPOSE_FILE" ps ralph-tasks --status running -q 2>/dev/null | grep -q .; then
+        echo "  ⚠ ralph-tasks not running, skipping"
+    else
+        docker compose -f "$COMPOSE_FILE" up -d ralph-tasks 2>&1 | sed 's/^/  /'
+        echo "  ✓ ralph-tasks restarted"
+    fi
 fi
 
 echo ""
